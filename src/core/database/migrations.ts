@@ -1,0 +1,113 @@
+/**
+ * Database migration runner
+ */
+
+import type { Database } from 'bun:sqlite';
+import { DatabaseError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
+import { CREATE_TABLES_SQL, SCHEMA_VERSION } from './schema.js';
+
+export interface Migration {
+  version: number;
+  description: string;
+  up: (db: Database) => void;
+  down?: (db: Database) => void;
+}
+
+const migrations: Migration[] = [
+  {
+    version: 1,
+    description: 'Initial schema with accounts, folders, emails, and FTS5',
+    up: (db: Database) => {
+      db.exec(CREATE_TABLES_SQL);
+    },
+    down: (db: Database) => {
+      db.exec(`
+        DROP TABLE IF EXISTS emails_fts;
+        DROP TABLE IF EXISTS emails;
+        DROP TABLE IF EXISTS folders;
+        DROP TABLE IF EXISTS accounts;
+        DROP TABLE IF EXISTS schema_version;
+      `);
+    },
+  },
+];
+
+export function getMigrations(): Migration[] {
+  return migrations;
+}
+
+export function getCurrentVersion(db: Database): number {
+  try {
+    const result = db
+      .query('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1')
+      .get() as { version: number } | undefined;
+    return result?.version ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function setVersion(db: Database, version: number): void {
+  db.exec('DELETE FROM schema_version');
+  db.exec(`INSERT INTO schema_version (version) VALUES (${version})`);
+}
+
+export function runMigrations(db: Database): void {
+  const currentVersion = getCurrentVersion(db);
+  const pendingMigrations = migrations.filter((m) => m.version > currentVersion);
+
+  if (pendingMigrations.length === 0) {
+    logger.debug('No pending migrations');
+    return;
+  }
+
+  logger.info('Running database migrations', { currentVersion, pending: pendingMigrations.length });
+
+  for (const migration of pendingMigrations) {
+    logger.info('Applying migration', {
+      version: migration.version,
+      description: migration.description,
+    });
+    try {
+      db.transaction(() => {
+        migration.up(db);
+        setVersion(db, migration.version);
+      })();
+      logger.info('Migration applied', { version: migration.version });
+    } catch (error) {
+      logger.error('Migration failed', { version: migration.version, error });
+      throw new DatabaseError(`Migration ${migration.version} failed: ${error}`);
+    }
+  }
+
+  logger.info('All migrations completed', { version: SCHEMA_VERSION });
+}
+
+export function rollbackMigration(db: Database, targetVersion: number): void {
+  const currentVersion = getCurrentVersion(db);
+  if (targetVersion >= currentVersion) {
+    throw new DatabaseError('Target version must be less than current version');
+  }
+
+  const toRollback = migrations
+    .filter((m) => m.version > targetVersion && m.version <= currentVersion)
+    .sort((a, b) => b.version - a.version);
+
+  for (const migration of toRollback) {
+    if (!migration.down) {
+      throw new DatabaseError(`Migration ${migration.version} cannot be rolled back`);
+    }
+    logger.info('Rolling back migration', { version: migration.version });
+    try {
+      db.transaction(() => {
+        migration.down!(db);
+        setVersion(db, migration.version - 1);
+      })();
+      logger.info('Migration rolled back', { version: migration.version });
+    } catch (error) {
+      logger.error('Rollback failed', { version: migration.version, error });
+      throw new DatabaseError(`Rollback ${migration.version} failed: ${error}`);
+    }
+  }
+}
