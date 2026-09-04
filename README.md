@@ -112,4 +112,6 @@ Configuration is stored at `~/.config/termail/config.json`:
 | `Esc` | Back to list |
 | `r` | Sync (Phase 2) |
 
+## License
 
+License not yet specified.
