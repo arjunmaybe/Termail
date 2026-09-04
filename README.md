@@ -1,15 +1,15 @@
 # Termail
 
-A modern TypeScript terminal email client inspired by the concept of ffail, built from scratch with a clean architecture.
+A modern, keyboard-driven terminal email client built with TypeScript, designed with a clean and extensible architecture.
 
 ## Features (Phase 1)
 
-- **TUI Interface** - Built with `@opentui/core` (React-like terminal UI)
+- **TUI Interface** - Built with `@opentui/core` using its class-based terminal UI API
 - **Reactive State** - Fine-grained reactivity with `@preact/signals`
 - **SQLite Storage** - Local database with FTS5 full-text search (using Bun's built-in `bun:sqlite`)
 - **Configuration** - JSON-based config with Zod validation
 - **TypeScript** - Strict type checking throughout
-- **Testing** - Vitest for unit and integration tests
+- **Testing** - Bun test runner for unit and integration tests
 - **Linting/Formatting** - Biome for code quality
 
 ## Planned Features (Phase 2+)
@@ -57,28 +57,26 @@ bun run format
 
 ## Project Structure
 
-```
+```text
 termail/
 ├── src/
 │   ├── main.ts                 # Entry point
 │   ├── app/
-│   │   ├── App.tsx             # Root component
-│   │   ├── layout/             # Layout components
-│   │   ├── components/         # UI components
-│   │   ├── hooks/              # React hooks
+│   │   ├── App.ts              # Root renderable
+│   │   ├── layout/             # Layout components (Sidebar, ContentPane, StatusBar)
+│   │   ├── components/         # UI components (EmailListView, FolderTabs, WelcomeView)
 │   │   └── theme.ts            # Color themes
 │   ├── core/
-│   │   ├── config/             # Configuration system
-│   │   ├── database/           # SQLite database layer
+│   │   ├── config/             # Configuration system (ConfigStore, defaults, Zod schema)
+│   │   ├── database/           # SQLite database layer (Database, migrations, schema)
 │   │   ├── state/              # Reactive app state
 │   │   ├── types/              # Core TypeScript types
-│   │   └── utils/              # Utilities
+│   │   └── utils/              # Utilities (logger, errors)
 │   └── test/                   # Test setup
 ├── tests/                      # Test files
 ├── package.json
 ├── tsconfig.json
 ├── biome.json
-├── vitest.config.ts
 └── README.md
 ```
 
