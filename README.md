@@ -28,7 +28,7 @@ A modern, keyboard-driven terminal email client built with TypeScript, designed 
 
 - [Bun](https://bun.sh/) v1.1+
 
-### Installation
+### Installation process for the viewer :
 
 ```bash
 # Clone and install
