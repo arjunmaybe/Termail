@@ -1,16 +1,17 @@
 /**
  * IMAP service - thin wrapper around `imapflow`'s `ImapFlow`.
  *
- * Responsibilities (Phase 2 step 1 only):
+ * Responsibilities (Phase 2):
  *   - Build a connection from an `AccountConfig` + env-resolved credentials.
  *   - Connect and authenticate (TLS, STARTTLS, or cleartext per config).
- *   - List mailboxes/folders.
+ *   - List mailboxes/folders (raw and normalized).
+ *   - Synchronize folders: classify, dedupe, and order.
  *   - Disconnect gracefully.
  *
- * Out of scope for this step:
+ * Out of scope:
  *   - Fetching messages.
  *   - IDLE / push notifications.
- *   - Caching mailboxes or sync state.
+ *   - Caching mailboxes or sync state on disk.
  *
  * The service is deliberately small: it does NOT store credentials, does NOT
  * hold a password past the connect() call, and does NOT log credentials. If
@@ -23,6 +24,8 @@ import type { AccountConfig } from '../types/config.js';
 import { AuthenticationError, NetworkError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { type ResolvedCredentials, resolveCredentials } from './credentials.js';
+import type { FolderSyncResult } from './folders.js';
+import { syncMailboxes } from './folders.js';
 import type { ImapAccountConfig, ImapFlowFactory, ImapFolderInfo } from './types.js';
 
 /** Default factory: produces real `ImapFlow` instances. */
@@ -161,6 +164,53 @@ export class ImapService {
       throw mapConnectionError(error, secret);
     }
     return raw.map(normalizeMailbox);
+  }
+
+  /**
+   * List mailboxes and run them through the folder synchronization
+   * pipeline: classify, dedupe, sort. Returns a deterministic
+   * `FolderSyncResult` ready for persistence in a later milestone.
+   *
+   * The connection is left open on success so callers can chain a
+   * message sync in a follow-up milestone without reconnecting. Errors
+   * are mapped through the same path as `connect()` and `listMailboxes()`.
+   */
+  async syncFolders(): Promise<FolderSyncResult> {
+    const entries = await this.listRawMailboxes();
+    return syncMailboxes(entries);
+  }
+
+  /**
+   * List mailboxes and return them in the raw shape consumed by
+   * `syncMailboxes`. Kept separate from `listMailboxes()` so the
+   * normalized `ImapFolderInfo` and the raw `ListResponse` shapes
+   * don't get confused at the type level.
+   */
+  private async listRawMailboxes(): Promise<
+    Array<{
+      path: string;
+      delimiter: string;
+      flags: Set<string>;
+      specialUse?: string;
+    }>
+  > {
+    if (!this.client) {
+      await this.connect();
+    }
+    const client = this.requireClient();
+    const secret = this.lastCredentials?.secret ?? '';
+    let raw;
+    try {
+      raw = await client.list();
+    } catch (error) {
+      throw mapConnectionError(error, secret);
+    }
+    return raw.map((entry) => ({
+      path: entry.path,
+      delimiter: entry.delimiter,
+      flags: entry.flags ?? new Set<string>(),
+      specialUse: entry.specialUse,
+    }));
   }
 
   private requireClient(): ImapFlow {

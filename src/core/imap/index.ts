@@ -19,6 +19,14 @@ export {
   resolveCredentials,
 } from './credentials.js';
 export {
+  type FolderSyncResult,
+  type SyncFolder,
+  classifyType,
+  compareFolders,
+  normalizeMailboxEntry,
+  syncMailboxes,
+} from './folders.js';
+export {
   ImapService,
   type ImapServiceOptions,
   buildImapOptions,
