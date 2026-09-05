@@ -34,6 +34,7 @@ export type {
   SyncStatus,
   FolderSyncState,
   PersistedEmail,
+  PersistedFolder,
   UpsertMessagesResult,
   PersistSyncResultOptions,
   SyncStatusOptions,

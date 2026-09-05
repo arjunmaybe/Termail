@@ -36,8 +36,10 @@ async function main(): Promise<void> {
           // Reserved for Phase 2 navigation
           break;
         case 'r':
-          // Sync is Phase 2; just toggle status briefly so the user sees feedback
-          logger.info('Sync requested (Phase 2)');
+          // Phase 2.5: trigger a sync of the current account / folder.
+          // The handler lives entirely inside `App.requestSync()`; this
+          // file is intentionally the only place that owns the keypress.
+          void app.requestSync();
           break;
         default:
           break;
