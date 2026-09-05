@@ -78,7 +78,13 @@ export class FolderTabs extends BoxRenderable {
 
     for (const folder of folders) {
       const isActive = folder.id === currentFolderId;
-      const label = folder.unreadCount > 0 ? `${folder.name} (${folder.unreadCount})` : folder.name;
+      // Phase 2.4 never writes `unread_count` / `total_count`, so the
+      // underlying `Folder` projection's `unreadCount` is always 0. Derive
+      // the sidebar's count from the in-memory email list via the
+      // `foldersWithUnread` computed signal (defined in `AppState`).
+      const folderWithUnread = selectors.foldersWithUnread.find((f) => f.id === folder.id);
+      const unread = folderWithUnread?.unreadCount ?? 0;
+      const label = unread > 0 ? `${folder.name} (${unread})` : folder.name;
       const tab = new TextRenderable(this.ctx, {
         id: `folder-tab-${folder.id}`,
         content: label,
