@@ -64,6 +64,36 @@ export interface FolderSyncState {
   updatedAt: number;
 }
 
+/**
+ * Typed return shape for a single `folders` row.
+ *
+ * `fullName` is the IMAP server path (e.g. `"INBOX"`, `"Sent"`, `"Archive/2024"`).
+ * It is the same value that was passed to `ImapService.syncMessages(folderPath)`
+ * and stored in the DB column `full_name`. Callers that need to drive an
+ * IMAP-side operation from a `PersistedFolder` MUST read `fullName`, never
+ * `id` (the id is `${accountId}:${path}` and is local to the database).
+ *
+ * `unreadCount` and `totalCount` reflect the stored DB columns, which
+ * Phase 2.4 does NOT currently update. Phase 2.5 displays folder counts
+ * derived from the loaded email list instead; these fields stay at `0`
+ * until a future milestone adds a counts-computation write path.
+ */
+export interface PersistedFolder {
+  id: string;
+  accountId: string;
+  name: string;
+  /** IMAP server path. Use this for `ImapService.syncMessages(folderPath)`. */
+  fullName: string;
+  type: string;
+  parentId: string | null;
+  delimiter: string;
+  attributes: string[];
+  unreadCount: number;
+  totalCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** Typed return shape for a single `emails` row. */
 export interface PersistedEmail {
   id: string;
@@ -605,6 +635,41 @@ export class MessageRepository {
       .all(accountId, folderId, limit) as Record<string, unknown>[];
     return rows.map(rowToEmail);
   }
+
+  /**
+   * List all folders belonging to an account, ordered to match the
+   * deterministic Phase 2.2 ordering: special-use types first
+   * (inbox, sent, drafts, archive, spam, trash, starred, important)
+   * then `custom` folders by `name` ascending. Within a type group
+   * the secondary sort is by `name` ascending.
+   *
+   * Read-only. Does not write or update any DB column.
+   */
+  listFoldersForAccount(accountId: string): PersistedFolder[] {
+    const rows = this.database
+      .query(
+        `SELECT id, account_id, name, full_name, type, parent_id,
+                delimiter, attributes, unread_count, total_count,
+                created_at, updated_at
+           FROM folders
+          WHERE account_id = ?
+          ORDER BY
+            CASE type
+              WHEN 'inbox'     THEN 0
+              WHEN 'sent'      THEN 1
+              WHEN 'drafts'    THEN 2
+              WHEN 'archive'   THEN 3
+              WHEN 'spam'      THEN 4
+              WHEN 'trash'     THEN 5
+              WHEN 'starred'   THEN 6
+              WHEN 'important' THEN 7
+              ELSE 8
+            END,
+            name ASC`
+      )
+      .all(accountId) as Record<string, unknown>[];
+    return rows.map(rowToFolder);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -670,6 +735,41 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
   return 'Unknown error';
+}
+
+/** Map a `folders` row to a typed `PersistedFolder`. */
+function rowToFolder(row: Record<string, unknown>): PersistedFolder {
+  const getStr = (k: string): string =>
+    typeof row[k] === 'string' ? (row[k] as string) : '';
+  const getStrOrNull = (k: string): string | null =>
+    row[k] === null || row[k] === undefined ? null : (row[k] as string);
+  const getNum = (k: string): number => (typeof row[k] === 'number' ? (row[k] as number) : 0);
+  let attributes: string[] = [];
+  const attrsRaw = getStr('attributes');
+  if (attrsRaw) {
+    try {
+      const parsed: unknown = JSON.parse(attrsRaw);
+      if (Array.isArray(parsed)) {
+        attributes = parsed.filter((a): a is string => typeof a === 'string');
+      }
+    } catch {
+      attributes = [];
+    }
+  }
+  return {
+    id: getStr('id'),
+    accountId: getStr('account_id'),
+    name: getStr('name'),
+    fullName: getStr('full_name'),
+    type: getStr('type'),
+    parentId: getStrOrNull('parent_id'),
+    delimiter: getStr('delimiter'),
+    attributes,
+    unreadCount: getNum('unread_count'),
+    totalCount: getNum('total_count'),
+    createdAt: getNum('created_at'),
+    updatedAt: getNum('updated_at'),
+  };
 }
 
 // ---------------------------------------------------------------------------

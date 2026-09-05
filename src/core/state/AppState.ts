@@ -3,7 +3,8 @@
  */
 
 import { computed, signal } from '@preact/signals';
-import type { Account, EmailEnvelope, Folder } from '../types/index.js';
+import type { PersistedEmail } from '../database/index.js';
+import type { Account, Folder } from '../types/index.js';
 
 export interface AppState {
   // Accounts
@@ -14,8 +15,10 @@ export interface AppState {
   folders: Folder[];
   currentFolderId: string | null;
 
-  // Emails
-  emails: EmailEnvelope[];
+  // Emails — the rich PersistedEmail shape carries body, CC, attachments,
+  // and headers, so the detail view reads from this list directly without
+  // a separate findById() call.
+  emails: PersistedEmail[];
   selectedEmailId: string | null;
 
   // UI state
@@ -40,7 +43,7 @@ const _accounts = signal<Account[]>([]);
 const _currentAccountId = signal<string | null>(null);
 const _folders = signal<Folder[]>([]);
 const _currentFolderId = signal<string | null>(null);
-const _emails = signal<EmailEnvelope[]>([]);
+const _emails = signal<PersistedEmail[]>([]);
 const _selectedEmailId = signal<string | null>(null);
 const _sidebarCollapsed = signal<boolean>(false);
 const _paneRatio = signal<number>(0.3);
@@ -154,18 +157,18 @@ export const actions = {
   },
 
   // Email actions
-  setEmails(emails: EmailEnvelope[]) {
+  setEmails(emails: PersistedEmail[]) {
     _emails.value = emails;
     _selectedEmailId.value = null;
   },
 
-  addEmails(emails: EmailEnvelope[]) {
+  addEmails(emails: PersistedEmail[]) {
     const existingIds = new Set(_emails.value.map((e) => e.id));
     const newEmails = emails.filter((e) => !existingIds.has(e.id));
     _emails.value = [...newEmails, ..._emails.value];
   },
 
-  updateEmail(emailId: string, updates: Partial<EmailEnvelope>) {
+  updateEmail(emailId: string, updates: Partial<PersistedEmail>) {
     _emails.value = _emails.value.map((e) => (e.id === emailId ? { ...e, ...updates } : e));
   },
 

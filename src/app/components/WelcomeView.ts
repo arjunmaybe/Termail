@@ -48,7 +48,7 @@ export class WelcomeView extends BoxRenderable {
     });
     this.hint = new TextRenderable(ctx, {
       id: 'welcome-hint',
-      content: "Press 'r' to sync (Phase 2)",
+      content: "Press 'r' to sync",
       fg: theme.textMuted,
     });
 
@@ -62,7 +62,15 @@ export class WelcomeView extends BoxRenderable {
 
   private refresh(): void {
     const folder = selectors.currentFolder;
-    this.subtitle.content = folder ? `No emails in ${folder.name} yet` : 'No emails synced yet';
+    const accounts = selectors.accounts;
+    if (accounts.length === 0) {
+      this.subtitle.content =
+        'No accounts configured. Add an account to config.json, then press \'r\' to sync.';
+    } else if (folder) {
+      this.subtitle.content = `No emails in ${folder.name} yet`;
+    } else {
+      this.subtitle.content = 'No emails synced yet';
+    }
   }
 
   setTheme(theme: Theme): void {

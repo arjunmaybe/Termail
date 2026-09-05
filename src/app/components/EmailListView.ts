@@ -4,7 +4,7 @@
 
 import { BoxRenderable, type RenderContext, TextAttributes, TextRenderable } from '@opentui/core';
 import { actions, selectors, subscribe } from '../../core/state/AppState.js';
-import type { EmailEnvelope } from '../../core/types/email.js';
+import type { PersistedEmail } from '../../core/database/index.js';
 import type { Theme } from '../theme.js';
 import { getTheme } from '../theme.js';
 
@@ -90,7 +90,7 @@ export class EmailListView extends BoxRenderable {
     }
   }
 
-  private buildItem(email: EmailEnvelope, isSelected: boolean): BoxRenderable {
+  private buildItem(email: PersistedEmail, isSelected: boolean): BoxRenderable {
     const item = new BoxRenderable(this.ctx, {
       id: `email-item-${email.id}`,
       flexDirection: 'column',
@@ -107,7 +107,7 @@ export class EmailListView extends BoxRenderable {
     });
     const from = new TextRenderable(this.ctx, {
       id: `email-item-from-${email.id}`,
-      content: email.from.map((a) => a.name || a.address).join(', '),
+      content: email.fromAddresses.map((a) => a.name || a.address).join(', '),
       fg: isSelected
         ? this.theme.textPrimary
         : email.isRead
@@ -117,7 +117,7 @@ export class EmailListView extends BoxRenderable {
     });
     const date = new TextRenderable(this.ctx, {
       id: `email-item-date-${email.id}`,
-      content: formatDate(email.date),
+      content: formatDate(new Date(email.date * 1000)),
       fg: this.theme.textMuted,
     });
     header.add(from);
