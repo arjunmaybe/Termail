@@ -54,6 +54,7 @@ describe('ConfigStore', () => {
           name: 'Test',
           email: 'test@example.com',
           enabled: true,
+          port: 993,
           useTls: true,
           authType: 'password',
         },
@@ -105,6 +106,7 @@ describe('ConfigStore', () => {
       name: 'Account 1',
       email: 'acc1@example.com',
       enabled: true,
+      port: 993,
       useTls: true,
       authType: 'password',
     });
@@ -118,6 +120,7 @@ describe('ConfigStore', () => {
       name: 'Account 1 Updated',
       email: 'acc1@example.com',
       enabled: true,
+      port: 993,
       useTls: true,
       authType: 'password',
     });
@@ -137,6 +140,7 @@ describe('ConfigStore', () => {
       name: 'Account 1',
       email: 'acc1@example.com',
       enabled: true,
+      port: 993,
       useTls: true,
       authType: 'password',
     });
