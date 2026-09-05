@@ -17,17 +17,36 @@ export const uiConfigSchema = z.object({
   compactMode: z.boolean().default(false),
 });
 
-export const accountConfigSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  email: z.string().email(),
-  enabled: z.boolean().default(true),
-  host: z.string().optional(),
-  port: z.number().int().positive().optional(),
-  username: z.string().optional(),
-  useTls: z.boolean().default(true),
-  authType: z.enum(['password', 'oauth2']).default('password'),
-});
+/**
+ * Account config schema.
+ *
+ * IMAP fields (`host`, `port`, `username`) are optional at the input level so
+ * the config file can be edited incrementally. After parsing, `port` is
+ * defaulted to 993 (TLS) or 143 (plain) so the runtime always has a usable
+ * port without callers re-checking.
+ *
+ * Passwords / OAuth tokens are NEVER stored in the config file. The
+ * `ImapService` resolves them from environment variables at connect time.
+ */
+export const accountConfigSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    email: z.string().email(),
+    enabled: z.boolean().default(true),
+    host: z.string().min(1).optional(),
+    port: z.number().int().positive().max(65535).optional(),
+    username: z.string().min(1).optional(),
+    useTls: z.boolean().default(true),
+    authType: z.enum(['password', 'oauth2']).default('password'),
+  })
+  .transform((account) => {
+    // Default the IMAP port based on TLS so callers can rely on a number.
+    if (account.port === undefined) {
+      return { ...account, port: account.useTls ? 993 : 143 };
+    }
+    return account;
+  });
 
 export const appConfigSchema = z.object({
   version: z.number().int().positive().default(1),

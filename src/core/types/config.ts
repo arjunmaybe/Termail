@@ -26,9 +26,13 @@ export interface AccountConfig {
   name: string;
   email: string;
   enabled: boolean;
-  // IMAP settings (for Phase 2+)
+  // IMAP settings. `port` is always present after validation (defaults to
+  // 993 for TLS or 143 for plain). `host` and `username` are required to
+  // actually connect; the schema leaves them optional so the config file
+  // can be edited incrementally, but the IMAP service will surface a
+  // descriptive error if they're missing.
   host?: string;
-  port?: number;
+  port: number;
   username?: string;
   useTls: boolean;
   authType: 'password' | 'oauth2';
