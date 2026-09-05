@@ -11,10 +11,12 @@ import { actions, selectors, subscribe } from '../core/state/AppState.js';
 import type { AccountConfig } from '../core/types/config.js';
 import type { Account, Folder } from '../core/types/index.js';
 import { logger } from '../core/utils/logger.js';
+import { SearchInputBar } from './components/SearchInputBar.js';
 import { ContentPane } from './layout/ContentPane.js';
 import { Sidebar } from './layout/Sidebar.js';
 import { StatusBar } from './layout/StatusBar.js';
-import { SyncService, type SyncOutcome } from './services/SyncService.js';
+import { SearchController } from './services/SearchController.js';
+import { type SyncOutcome, SyncService } from './services/SyncService.js';
 import { type Theme, getTheme } from './theme.js';
 
 export interface AppOptions {
@@ -30,13 +32,14 @@ export class App extends BoxRenderable {
   private sidebar: Sidebar;
   private content: ContentPane;
   private statusBar: StatusBar;
+  private searchInputBar: SearchInputBar;
   private banner: TextRenderable;
   private errorBanner: TextRenderable;
   private initialized = false;
   private initError: string | null = null;
   private syncService: SyncService;
+  private searchController: SearchController | null = null;
   private syncInFlight: Set<string> = new Set();
-  private lastLoadedAccountId: string | null = null;
   private lastLoadedFolderId: string | null = null;
 
   constructor(ctx: RenderContext, options: AppOptions & { id?: string } = {}) {
@@ -68,20 +71,28 @@ export class App extends BoxRenderable {
       height: 1,
     });
 
-    // Main three-pane layout: sidebar + content + status bar
+    // Main three-pane layout: sidebar + content + status bar.
+    // The `searchInputBar` is a one-line strip above the status bar;
+    // it is hidden by default and shown only when search is active.
     this.sidebar = new Sidebar(ctx, { id: 'sidebar', themeMode: this.themeMode });
     this.content = new ContentPane(ctx, { id: 'content-pane', themeMode: this.themeMode });
     this.statusBar = new StatusBar(ctx, { id: 'status-bar', themeMode: this.themeMode });
+    this.searchInputBar = new SearchInputBar(ctx, {
+      id: 'search-input-bar',
+      themeMode: this.themeMode,
+    });
 
     this.sidebar.visible = false;
     this.content.visible = false;
     this.statusBar.visible = false;
+    this.searchInputBar.visible = false;
     this.errorBanner.visible = false;
 
     this.add(this.banner);
     this.add(this.errorBanner);
     this.add(this.sidebar);
     this.add(this.content);
+    this.add(this.searchInputBar);
     this.add(this.statusBar);
 
     // The `SyncService` is constructed lazily inside `initialize()` once
@@ -107,6 +118,12 @@ export class App extends BoxRenderable {
       if (!this.syncService) {
         this.syncService = new SyncService(database);
       }
+
+      // Phase 3.3 — the `SearchController` is built here, after the
+      // database is ready, so it can hand the connection to the
+      // `SearchService`. There is no test fake; the controller is a
+      // pure dispatcher on top of the real service.
+      this.searchController = new SearchController(database);
 
       // Seed state from config + DB.
       const configAccounts = config.accounts ?? [];
@@ -156,6 +173,7 @@ export class App extends BoxRenderable {
     this.sidebar.setTheme(theme);
     this.content.setTheme(theme);
     this.statusBar.setTheme(theme);
+    this.searchInputBar.setTheme(theme);
   }
 
   /**
@@ -266,7 +284,6 @@ export class App extends BoxRenderable {
     const repository = new MessageRepository(database);
     const emails = repository.listByFolder(accountId, folderId, 500);
     this.lastLoadedFolderId = folderId;
-    this.lastLoadedAccountId = accountId;
     actions.setEmails(emails);
   }
 
@@ -290,6 +307,63 @@ export class App extends BoxRenderable {
   }
   getSyncService(): SyncService {
     return this.syncService;
+  }
+
+  // -----------------------------------------------------------------
+  // Phase 3.3 — Search (TUI-facing API; keypress dispatcher lives
+  // in `main.ts` and calls these methods).
+  // -----------------------------------------------------------------
+
+  /**
+   * Snapshot of "is the search input bar open right now". The
+   * `main.ts` keypress dispatcher calls this to decide between
+   * the search-active branch and the regular branch.
+   */
+  isSearchActive(): boolean {
+    return this.searchController?.isActive() ?? false;
+  }
+
+  /** Open the search input bar and clear any prior search state. */
+  openSearch(): void {
+    this.searchController?.openSearch();
+  }
+
+  /**
+   * Append a single printable character to the input buffer. The
+   * `main.ts` dispatcher filters out non-printable / modifier
+   * keys before calling this.
+   */
+  pushChar(ch: string): void {
+    this.searchController?.pushChar(ch);
+  }
+
+  /** Remove the last character from the input buffer. */
+  popChar(): void {
+    this.searchController?.popChar();
+  }
+
+  /** Run the current search query. No-op on an empty buffer. */
+  async submitSearch(): Promise<void> {
+    await this.searchController?.submitSearch();
+  }
+
+  /** Cancel and close the search input bar. */
+  cancelSearch(): void {
+    this.searchController?.cancelSearch();
+  }
+
+  /**
+   * Tear down the App and its child components. Used by tests to
+   * release signal subscriptions before destroying the renderer.
+   * Not normally called by `main.ts`; that path exits the process.
+   */
+  override destroy(): void {
+    this.sidebar.destroy();
+    this.content.destroy();
+    this.statusBar.destroy();
+    this.searchInputBar.destroy();
+    this.errorBanner.destroy();
+    this.banner.destroy();
   }
 }
 

@@ -14,7 +14,6 @@ export interface StatusBarOptions {
 
 export class StatusBar extends BoxRenderable {
   private theme: Theme;
-  private themeMode: 'dark' | 'light';
   private leftGroup: BoxRenderable;
   private rightGroup: BoxRenderable;
   private folderLabel: TextRenderable;
@@ -39,7 +38,6 @@ export class StatusBar extends BoxRenderable {
     });
 
     this.theme = theme;
-    this.themeMode = options.themeMode;
 
     this.leftGroup = new BoxRenderable(ctx, {
       id: 'status-left',
@@ -56,6 +54,7 @@ export class StatusBar extends BoxRenderable {
     this.leftGroup.add(this.kbdHint(ctx, '↑/↓', 'Navigate'));
     this.leftGroup.add(this.kbdHint(ctx, 'Enter', 'Open'));
     this.leftGroup.add(this.kbdHint(ctx, 'Esc', 'Back'));
+    this.leftGroup.add(this.kbdHint(ctx, '/', 'Search'));
     this.leftGroup.add(this.kbdHint(ctx, 'r', 'Sync'));
 
     this.folderLabel = new TextRenderable(ctx, {
@@ -140,7 +139,6 @@ export class StatusBar extends BoxRenderable {
 
   setTheme(theme: Theme): void {
     this.theme = theme;
-    this.themeMode = theme === getTheme('dark') ? 'dark' : 'light';
     this.backgroundColor = theme.surface;
     this.borderColor = theme.border;
     this.folderLabel.fg = theme.textSecondary;
