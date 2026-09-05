@@ -10,9 +10,15 @@
  * migration entry in `migrations.ts`. v2 only adds new columns on
  * `emails`, a new `folder_sync_state` table, and new indexes — it
  * does NOT rebuild `emails` and does NOT change the FTS5 triggers.
+ *
+ * v3 lives in `migrations/v3.sql.ts`. v3 drops and recreates the
+ * `emails_fts` virtual table to add `cc_addresses` to the indexed
+ * column list, repopulates the FTS5 index from `emails`, and
+ * re-creates the three triggers. The user-data `emails` table is
+ * not modified.
  */
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const CREATE_TABLES_V1_SQL = `
 -- Accounts table

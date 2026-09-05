@@ -6,6 +6,7 @@ import type { Database } from 'bun:sqlite';
 import { DatabaseError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { MIGRATION_V2_UP_SQL } from './migrations/v2.sql.js';
+import { MIGRATION_V3_UP_SQL } from './migrations/v3.sql.js';
 import { CREATE_TABLES_SQL, SCHEMA_VERSION } from './schema.js';
 
 export interface Migration {
@@ -53,6 +54,19 @@ const migrations: Migration[] = [
         DROP TABLE IF EXISTS folder_sync_state;
       `);
     },
+  },
+  {
+    version: 3,
+    description: 'Add cc_addresses to the FTS5 full-text search index',
+    up: (db: Database) => {
+      db.exec(MIGRATION_V3_UP_SQL);
+    },
+    // v3 is forward-only: rolling back would require another full
+    // FTS5 rebuild, and the safe way to revert to a pre-v3 state
+    // is to start from a fresh database. The `down` is omitted on
+    // purpose; the `rollbackMigration` runner treats an absent
+    // `down` as a STOP (matches the v2 comment on dropping
+    // columns referenced by an FTS trigger).
   },
 ];
 
