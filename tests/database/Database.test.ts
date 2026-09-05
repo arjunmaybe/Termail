@@ -75,7 +75,7 @@ describe('Database', () => {
     const version = instance.query('SELECT version FROM schema_version').get() as
       | { version: number }
       | undefined;
-    expect(version?.version).toBe(2);
+    expect(version?.version).toBe(3);
   });
 
   it('should support CRUD operations on accounts', async () => {

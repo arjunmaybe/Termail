@@ -176,11 +176,11 @@ describe('MessageRepository', () => {
   // -------------------------------------------------------------------------
 
   describe('migration', () => {
-    it('runs v1 then v2 on a fresh database', () => {
+    it('runs v1 then v2 then v3 on a fresh database', () => {
       const version = db
         .query('SELECT version FROM schema_version')
         .get() as { version: number };
-      expect(version.version).toBe(2);
+      expect(version.version).toBe(3);
     });
 
     it('adds the new columns on emails', () => {
@@ -268,7 +268,7 @@ describe('MessageRepository', () => {
       expect(true).toBe(true);
     });
 
-    it('preserves pre-existing v1 email rows on a real v1 → v2 upgrade', async () => {
+    it('preserves pre-existing v1 email rows on a real v1 → v2 → v3 upgrade', async () => {
       // Build a brand-new DB that looks exactly like a v1 install,
       // then point a fresh Database at it and run migrations.
       const v1Path = join(
@@ -382,24 +382,24 @@ describe('MessageRepository', () => {
         fresh.close();
 
         // Now open that file with the real Database class and let it
-        // run the v1→v2 migration.
+        // run the v1→v2→v3 migrations.
         resetDatabase();
-        const v2Path = v1Path; // reuse the same file
+        const upgradedPath = v1Path; // reuse the same file
         const v1ConfigPath = join(
           tmpdir(),
           `termail-v1-cfg-${Date.now()}-${Math.random()}.json`
         );
         const v1Store = getConfigStore(v1ConfigPath);
         await v1Store.initialize();
-        await v1Store.updateConfig({ database: { path: v2Path } } as Partial<AppConfig>);
+        await v1Store.updateConfig({ database: { path: upgradedPath } } as Partial<AppConfig>);
         const v1Db = getDatabase(v1Store.getConfig());
         await v1Db.initialize();
 
-        // Migration applied.
+        // Migrations applied.
         const v = v1Db
           .query('SELECT version FROM schema_version')
           .get() as { version: number };
-        expect(v.version).toBe(2);
+        expect(v.version).toBe(3);
 
         // Legacy row is still here, with uid = NULL.
         const legacy = v1Db

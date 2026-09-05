@@ -6,7 +6,12 @@
  */
 
 export { Database, getDatabase, resetDatabase } from './Database.js';
-export { getMigrations, getCurrentVersion, runMigrations, rollbackMigration } from './migrations.js';
+export {
+  getMigrations,
+  getCurrentVersion,
+  runMigrations,
+  rollbackMigration,
+} from './migrations.js';
 export type { Migration } from './migrations.js';
 export {
   SCHEMA_VERSION,
@@ -15,6 +20,7 @@ export {
   DROP_TABLES_SQL,
 } from './schema.js';
 export { MIGRATION_V2_UP_SQL } from './migrations/v2.sql.js';
+export { MIGRATION_V3_UP_SQL } from './migrations/v3.sql.js';
 export {
   MessageRepository,
   buildImapSyncLimits,
@@ -39,3 +45,11 @@ export type {
   PersistSyncResultOptions,
   SyncStatusOptions,
 } from './MessageRepository.js';
+export {
+  SearchRepository,
+  buildMatchQuery,
+  clampLimit,
+  SEARCH_DEFAULT_LIMIT,
+  SEARCH_MAX_LIMIT,
+} from './SearchRepository.js';
+export type { SearchHit, SearchOptions } from './SearchRepository.js';
