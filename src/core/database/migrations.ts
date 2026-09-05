@@ -5,6 +5,7 @@
 import type { Database } from 'bun:sqlite';
 import { DatabaseError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
+import { MIGRATION_V2_UP_SQL } from './migrations/v2.sql.js';
 import { CREATE_TABLES_SQL, SCHEMA_VERSION } from './schema.js';
 
 export interface Migration {
@@ -28,6 +29,28 @@ const migrations: Migration[] = [
         DROP TABLE IF EXISTS folders;
         DROP TABLE IF EXISTS accounts;
         DROP TABLE IF EXISTS schema_version;
+      `);
+    },
+  },
+  {
+    version: 2,
+    description:
+      'Add IMAP synchronization identity (uid) and per-folder sync state',
+    up: (db: Database) => {
+      db.exec(MIGRATION_V2_UP_SQL);
+    },
+    down: (db: Database) => {
+      // Drop the new indexes and table. We do not attempt to remove
+      // the v2 columns from `emails` — SQLite has no `DROP COLUMN`
+      // (and even if it did, dropping columns referenced by an
+      // existing FTS trigger is unsafe). v2→v1 rollback is therefore a
+      // forward-only operation: it discards the new sync state but
+      // keeps the new columns in place. A fresh v1 database is the
+      // safe way to go back.
+      db.exec(`
+        DROP INDEX IF EXISTS idx_emails_internal_date;
+        DROP INDEX IF EXISTS uq_emails_account_folder_uid;
+        DROP TABLE IF EXISTS folder_sync_state;
       `);
     },
   },
