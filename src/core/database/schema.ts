@@ -1,10 +1,20 @@
 /**
- * Database schema DDL statements
+ * Database schema DDL statements.
+ *
+ * The DDL is split by migration version. `CREATE_TABLES_V1_SQL` is the
+ * Phase 1 baseline (accounts, folders, emails, FTS5, triggers, version
+ * table). The legacy `CREATE_TABLES_SQL` export is preserved as a
+ * re-export of the v1 DDL so any external imports continue to work.
+ *
+ * v2 lives in `migrations/v2.sql.ts` and is applied by an additive
+ * migration entry in `migrations.ts`. v2 only adds new columns on
+ * `emails`, a new `folder_sync_state` table, and new indexes — it
+ * does NOT rebuild `emails` and does NOT change the FTS5 triggers.
  */
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
-export const CREATE_TABLES_SQL = `
+export const CREATE_TABLES_V1_SQL = `
 -- Accounts table
 CREATE TABLE IF NOT EXISTS accounts (
   id TEXT PRIMARY KEY,
@@ -114,6 +124,13 @@ CREATE TABLE IF NOT EXISTS schema_version (
   applied_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 `;
+
+/**
+ * Legacy export. Kept as a re-export of the v1 DDL so callers that
+ * import `CREATE_TABLES_SQL` still see the v1 baseline (which is what
+ * they expect — it has not changed).
+ */
+export const CREATE_TABLES_SQL = CREATE_TABLES_V1_SQL;
 
 export const DROP_TABLES_SQL = `
 DROP TABLE IF EXISTS emails_fts;
