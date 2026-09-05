@@ -25,6 +25,33 @@ async function main(): Promise<void> {
 
     // Bind global keyboard shortcuts
     renderer.keyInput.on('keypress', (key) => {
+      // Phase 3.3 — search-active branch. While the search input
+      // bar is open, `q` and `r` are disabled and the regular
+      // navigation keys are routed to the search controller.
+      if (app.isSearchActive()) {
+        if (key.ctrl) return; // ignore Ctrl-modified keys
+        switch (key.name) {
+          case 'escape':
+            app.cancelSearch();
+            return;
+          case 'return':
+            void app.submitSearch();
+            return;
+          case 'backspace':
+            app.popChar();
+            return;
+          case 'space':
+            app.pushChar(' ');
+            return;
+          default:
+            // Printable single character.
+            if (typeof key.name === 'string' && key.name.length === 1) {
+              app.pushChar(key.name);
+            }
+            return;
+        }
+      }
+
       switch (key.name) {
         case 'q':
           if (!key.ctrl) {
@@ -40,6 +67,11 @@ async function main(): Promise<void> {
           // The handler lives entirely inside `App.requestSync()`; this
           // file is intentionally the only place that owns the keypress.
           void app.requestSync();
+          break;
+        case '/':
+        case 'slash':
+          // Phase 3.3: open the search input bar.
+          app.openSearch();
           break;
         default:
           break;

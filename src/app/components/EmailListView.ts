@@ -15,8 +15,9 @@ export interface EmailListViewOptions {
 
 export class EmailListView extends BoxRenderable {
   private theme: Theme;
-  private themeMode: 'dark' | 'light';
   private emptyState: BoxRenderable;
+  private emptyTitle: TextRenderable;
+  private emptySubtitle: TextRenderable;
   private list: BoxRenderable;
   private unsubscribe: (() => void) | null = null;
 
@@ -31,7 +32,6 @@ export class EmailListView extends BoxRenderable {
     });
 
     this.theme = theme;
-    this.themeMode = options.themeMode;
 
     this.emptyState = new BoxRenderable(ctx, {
       id: 'email-list-empty',
@@ -52,6 +52,8 @@ export class EmailListView extends BoxRenderable {
       content: 'Select a folder or sync to load emails',
       fg: theme.textMuted,
     });
+    this.emptyTitle = emptyTitle;
+    this.emptySubtitle = emptySubtitle;
     this.emptyState.add(emptyTitle);
     this.emptyState.add(emptySubtitle);
 
@@ -70,13 +72,35 @@ export class EmailListView extends BoxRenderable {
   }
 
   private refresh(): void {
-    const emails = selectors.emails;
+    // Phase 3.3: when a search is active and the repository has
+    // returned hits, render those instead of the folder-bound
+    // `emails` list. The default branch (no search) is unchanged.
+    const isSearching = selectors.searchActive && selectors.searchHits !== null;
+    const emails = isSearching ? (selectors.searchHits ?? []) : selectors.emails;
     const selectedId = selectors.selectedEmailId;
 
     this.emptyState.visible = emails.length === 0;
     this.list.visible = emails.length > 0;
 
-    if (emails.length === 0) return;
+    if (emails.length === 0) {
+      // The empty-state copy changes based on the current state.
+      if (isSearching) {
+        if (selectors.searchError) {
+          this.emptyTitle.content = 'Search failed';
+          this.emptySubtitle.content = selectors.searchError;
+        } else if (selectors.searchIssues.length > 0) {
+          this.emptyTitle.content = 'Query has issues';
+          this.emptySubtitle.content = selectors.searchIssues.map((i) => i.message).join('; ');
+        } else {
+          this.emptyTitle.content = 'No search results';
+          this.emptySubtitle.content = 'Try different terms or operators';
+        }
+      } else {
+        this.emptyTitle.content = 'No emails';
+        this.emptySubtitle.content = 'Select a folder or sync to load emails';
+      }
+      return;
+    }
 
     // Rebuild list items
     const items = this.list.getChildren().slice();
@@ -137,7 +161,6 @@ export class EmailListView extends BoxRenderable {
 
   setTheme(theme: Theme): void {
     this.theme = theme;
-    this.themeMode = theme === getTheme('dark') ? 'dark' : 'light';
     this.backgroundColor = theme.background;
     this.refresh();
   }

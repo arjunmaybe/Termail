@@ -90,6 +90,49 @@ export const SEARCH_MAX_LIMIT = 500;
 export const SEARCH_DEFAULT_LIMIT = 50;
 
 // ---------------------------------------------------------------------------
+// Structured search (Phase 3.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Public options for a structured (non-FTS5-first) search.
+ *
+ * Every field is optional. Multiple fields combine with `AND` semantics
+ * inside the repository. All values are bound as parameters; the
+ * repository never interpolates user input into SQL.
+ *
+ * Date fields (`after`, `before`) are **epoch seconds** — the same
+ * representation the `emails.date` / `emails.internal_date` /
+ * `emails.received_at` columns use. Callers that take a user-typed
+ * `YYYY-MM-DD` must convert via `isoDateToEpochSeconds` first.
+ */
+export interface StructuredSearchOptions {
+  /** FTS5 free-text remainder. Empty / undefined skips the FTS5 path. */
+  text?: string;
+  /** Restrict to one account. `undefined` means "any account". */
+  accountId?: string;
+  /** Restrict to one folder id. Requires `accountId` when set. */
+  folderId?: string;
+  /** Case-insensitive substring match against the `subject` column. */
+  subject?: string;
+  /** Substring match against any address in the `from_addresses` JSON. */
+  from?: string;
+  /** Substring match against any address in the `to_addresses` JSON. */
+  to?: string;
+  /** Folder-path match against `folders.full_name` (case-insensitive). */
+  folder?: string;
+  /** `true` -> `is_read = 1`, `false` -> `is_read = 0`. */
+  isRead?: boolean;
+  /** `has_attachments = 1` if `true`. */
+  hasAttachment?: boolean;
+  /** Inclusive lower bound on `internal_date` (epoch seconds). */
+  after?: number;
+  /** Inclusive upper bound on `internal_date` (epoch seconds). */
+  before?: number;
+  /** Result cap. Clamped via `clampLimit`. */
+  limit?: number;
+}
+
+// ---------------------------------------------------------------------------
 // Pure helpers
 // ---------------------------------------------------------------------------
 
@@ -272,7 +315,209 @@ export class SearchRepository {
 
     const rows = this.database.query<Row>(sql).all(...params);
 
-    return rows.map((row) => ({
+    return rows.map((row) => this.mapRowToHit(row));
+  }
+
+  /**
+   * Run a structured search and return ranked matches.
+   *
+   * Two execution paths:
+   *   1. `options.text` is non-empty -> use the FTS5 `emails_fts`
+   *      virtual table (BM25 ranking) AND-joined with the structured
+   *      filters.
+   *   2. `options.text` is empty -> skip FTS5 entirely; query
+   *      `emails` directly and order by `internal_date DESC, id ASC`
+   *      (a stable order that mirrors `MessageRepository.listByFolder`).
+   *
+   * All structured filters contribute one `AND` clause to the `WHERE`.
+   * Every value is bound via `?` placeholders; user input is never
+   * interpolated into SQL. The `subject` / `from` / `to` / `folder`
+   * filters use case-insensitive `LIKE` on the underlying text
+   * columns.
+   *
+   * Date semantics: `after` and `before` filter on
+   * `emails.internal_date` (epoch seconds, the same column
+   * `MessageRepository.listByFolder` orders by). Rows with
+   * `internal_date IS NULL` are excluded by the date filter so the
+   * filter is meaningful; they survive when no date filter is given.
+   *
+   * The `accountId` / `folderId` rules from `search()` are preserved:
+   * `folderId` without `accountId` short-circuits to `[]` (it is
+   * not unique across accounts).
+   *
+   * The result row -> `PersistedEmail` mapping reuses the same
+   * `Row` type and field-by-field assignment as `search()`; both
+   * methods call the private `mapRowToHit` helper.
+   */
+  searchStructured(options: StructuredSearchOptions = {}): SearchHit[] {
+    // `folderId` without `accountId` is rejected (same as search()).
+    if (options.folderId !== undefined && options.accountId === undefined) {
+      return [];
+    }
+
+    const limit = clampLimit(options.limit);
+
+    // -----------------------------------------------------------------
+    // Build the WHERE / ORDER BY for the two execution paths.
+    // -----------------------------------------------------------------
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+
+    let fromClause: string;
+    let orderBy: string;
+
+    if (options.text !== undefined && options.text.trim().length > 0) {
+      const match = buildMatchQuery(options.text);
+      if (match !== null) {
+        fromClause = 'FROM emails_fts JOIN emails AS e ON e.rowid = emails_fts.rowid';
+        where.push('emails_fts MATCH ?');
+        params.push(match);
+        // When FTS5 is the entry point, every other condition is an
+        // additional `AND e.col = ?` clause.
+        orderBy = 'ORDER BY bm25(emails_fts) ASC';
+      } else {
+        // FTS5 sanitization stripped everything; treat as a pure
+        // structured query with no ranking signal.
+        fromClause = 'FROM emails AS e';
+        orderBy = 'ORDER BY e.internal_date DESC, e.id ASC';
+      }
+    } else {
+      fromClause = 'FROM emails AS e';
+      orderBy = 'ORDER BY e.internal_date DESC, e.id ASC';
+    }
+
+    if (options.accountId !== undefined) {
+      where.push('e.account_id = ?');
+      params.push(options.accountId);
+    }
+    if (options.folderId !== undefined) {
+      where.push('e.folder_id = ?');
+      params.push(options.folderId);
+    }
+    if (options.subject !== undefined && options.subject.length > 0) {
+      where.push('LOWER(e.subject) LIKE LOWER(?)');
+      params.push(`%${options.subject}%`);
+    }
+    if (options.from !== undefined && options.from.length > 0) {
+      where.push('LOWER(e.from_addresses) LIKE LOWER(?)');
+      params.push(`%${options.from}%`);
+    }
+    if (options.to !== undefined && options.to.length > 0) {
+      where.push('LOWER(e.to_addresses) LIKE LOWER(?)');
+      params.push(`%${options.to}%`);
+    }
+    if (options.folder !== undefined && options.folder.length > 0) {
+      // Join to `folders` so the path match is exact (not the
+      // synthesized local id).
+      fromClause =
+        options.text !== undefined && options.text.trim().length > 0 && buildMatchQuery(options.text) !== null
+          ? 'FROM emails_fts JOIN emails AS e ON e.rowid = emails_fts.rowid JOIN folders AS f ON f.id = e.folder_id'
+          : 'FROM emails AS e JOIN folders AS f ON f.id = e.folder_id';
+      where.push('LOWER(f.full_name) = LOWER(?)');
+      params.push(options.folder);
+    }
+    if (options.isRead === true) {
+      where.push('e.is_read = 1');
+    } else if (options.isRead === false) {
+      where.push('e.is_read = 0');
+    }
+    if (options.hasAttachment === true) {
+      where.push('e.has_attachments = 1');
+    }
+    if (options.after !== undefined && options.before !== undefined) {
+      where.push('e.internal_date BETWEEN ? AND ?');
+      params.push(options.after, options.before);
+    } else if (options.after !== undefined) {
+      where.push('e.internal_date >= ?');
+      params.push(options.after);
+    } else if (options.before !== undefined) {
+      where.push('e.internal_date <= ?');
+      params.push(options.before);
+    }
+
+    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    params.push(limit);
+
+    const sql = `
+      SELECT
+        e.id, e.account_id, e.folder_id, e.message_id,
+        e.from_addresses, e.to_addresses, e.cc_addresses,
+        e.subject, e.date, e.internal_date, e.received_at,
+        e.is_read, e.is_flagged, e.is_answered, e.is_draft,
+        e.has_attachments, e.size, e.body_text, e.body_html,
+        e.headers, e.attachments, e.flags, e.uid,
+        e.created_at, e.updated_at,
+        0 AS score
+      ${fromClause}
+      ${whereSql}
+      ${orderBy}
+      LIMIT ?
+    `;
+
+    type Row = {
+      id: string;
+      account_id: string;
+      folder_id: string;
+      message_id: string;
+      from_addresses: string;
+      to_addresses: string;
+      cc_addresses: string;
+      subject: string;
+      date: number;
+      internal_date: number | null;
+      received_at: number | null;
+      is_read: number;
+      is_flagged: number;
+      is_answered: number;
+      is_draft: number;
+      has_attachments: number;
+      size: number;
+      body_text: string | null;
+      body_html: string | null;
+      headers: string;
+      attachments: string;
+      flags: string;
+      uid: number | null;
+      created_at: number;
+      updated_at: number;
+      score: number;
+    };
+
+    const rows = this.database.query<Row>(sql).all(...params);
+    return rows.map((row) => this.mapRowToHit(row));
+  }
+
+  /** Convert a `Row` to a `SearchHit`. Centralized so the two
+   * execution paths share the exact same field mapping. */
+  private mapRowToHit(row: {
+    id: string;
+    account_id: string;
+    folder_id: string;
+    message_id: string;
+    from_addresses: string;
+    to_addresses: string;
+    cc_addresses: string;
+    subject: string;
+    date: number;
+    internal_date: number | null;
+    received_at: number | null;
+    is_read: number;
+    is_flagged: number;
+    is_answered: number;
+    is_draft: number;
+    has_attachments: number;
+    size: number;
+    body_text: string | null;
+    body_html: string | null;
+    headers: string;
+    attachments: string;
+    flags: string;
+    uid: number | null;
+    created_at: number;
+    updated_at: number;
+    score: number;
+  }): SearchHit {
+    return {
       score: row.score,
       email: {
         id: row.id,
@@ -301,7 +546,7 @@ export class SearchRepository {
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       },
-    }));
+    };
   }
 }
 

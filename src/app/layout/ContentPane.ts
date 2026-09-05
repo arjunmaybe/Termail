@@ -139,7 +139,11 @@ export class ContentPane extends BoxRenderable {
     const currentFolder = selectors.currentFolder;
 
     if (selectedId) {
-      const email = selectors.emails.find((e) => e.id === selectedId);
+      const sourceEmails = selectors.searchActive
+        ? (selectors.searchHits ?? [])
+        : selectors.emails;
+
+      const email = sourceEmails.find((e) => e.id === selectedId);
       if (email) {
         this.showDetail(email);
         return;
@@ -198,6 +202,8 @@ export class ContentPane extends BoxRenderable {
   override destroy(): void {
     if (this.unsubscribe) this.unsubscribe();
     this.unsubscribe = null;
+    this.emailListView.destroy();
+    this.welcomeView.destroy();
     super.destroy();
   }
 }

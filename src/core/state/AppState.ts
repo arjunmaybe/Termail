@@ -4,6 +4,7 @@
 
 import { computed, signal } from '@preact/signals';
 import type { PersistedEmail } from '../database/index.js';
+import type { ParseIssue } from '../search/SearchQueryParser.js';
 import type { Account, Folder } from '../types/index.js';
 
 export interface AppState {
@@ -36,6 +37,29 @@ export interface AppState {
 
   // Error state
   lastError: string | null;
+
+  // Search state (Phase 3.3)
+  /**
+   * Current search results, or `null` when no search is in progress.
+   * The TUI's `EmailListView` reads from this list instead of
+   * `emails` when `searchActive` is true and `searchHits` is non-null.
+   */
+  searchHits: PersistedEmail[] | null;
+  /** Raw user input buffer for the search input bar. */
+  searchQuery: string;
+  /** True while the search input bar is visible. */
+  searchActive: boolean;
+  /**
+   * Parser issues from the most recent submit. Empty when the
+   * parser had no complaints. Surfaced as a "query has issues"
+   * placeholder in the email list.
+   */
+  searchIssues: ParseIssue[];
+  /**
+   * Repository error from the most recent submit. Cleared on every
+   * submit. Surfaced as a "search failed" placeholder.
+   */
+  searchError: string | null;
 }
 
 // Internal signals
@@ -53,6 +77,13 @@ const _lastSyncAt = signal<number | null>(null);
 const _isLoadingFolders = signal<boolean>(false);
 const _isLoadingEmails = signal<boolean>(false);
 const _lastError = signal<string | null>(null);
+
+// Search state (Phase 3.3)
+const _searchHits = signal<PersistedEmail[] | null>(null);
+const _searchQuery = signal<string>('');
+const _searchActive = signal<boolean>(false);
+const _searchIssues = signal<ParseIssue[]>([]);
+const _searchError = signal<string | null>(null);
 
 // Computed signals
 const currentAccount = computed(() => {
@@ -244,6 +275,35 @@ export const actions = {
     _lastError.value = null;
   },
 
+  // Search actions (Phase 3.3)
+  setSearchActive(active: boolean) {
+    _searchActive.value = active;
+  },
+
+  setSearchQuery(query: string) {
+    _searchQuery.value = query;
+  },
+
+  setSearchHits(hits: PersistedEmail[] | null) {
+    _searchHits.value = hits;
+  },
+
+  setSearchIssues(issues: ParseIssue[]) {
+    _searchIssues.value = issues;
+  },
+
+  setSearchError(error: string | null) {
+    _searchError.value = error;
+  },
+
+  clearSearch() {
+    _searchActive.value = false;
+    _searchQuery.value = '';
+    _searchHits.value = null;
+    _searchIssues.value = [];
+    _searchError.value = null;
+  },
+
   // Reset all state
   reset() {
     _accounts.value = [];
@@ -259,6 +319,12 @@ export const actions = {
     _isLoadingFolders.value = false;
     _isLoadingEmails.value = false;
     _lastError.value = null;
+    // Search state (Phase 3.3)
+    _searchHits.value = null;
+    _searchQuery.value = '';
+    _searchActive.value = false;
+    _searchIssues.value = [];
+    _searchError.value = null;
   },
 };
 
@@ -324,6 +390,22 @@ export const selectors = {
   get lastError() {
     return _lastError.value;
   },
+  // Search selectors (Phase 3.3)
+  get searchHits() {
+    return _searchHits.value;
+  },
+  get searchQuery() {
+    return _searchQuery.value;
+  },
+  get searchActive() {
+    return _searchActive.value;
+  },
+  get searchIssues() {
+    return _searchIssues.value;
+  },
+  get searchError() {
+    return _searchError.value;
+  },
   subscribe(fn: () => void): () => void {
     return subscribe(fn);
   },
@@ -346,6 +428,12 @@ export function subscribe(fn: (state: AppState) => void): () => void {
     _isLoadingFolders,
     _isLoadingEmails,
     _lastError,
+    // Search state (Phase 3.3)
+    _searchHits,
+    _searchQuery,
+    _searchActive,
+    _searchIssues,
+    _searchError,
   ];
 
   // Each signal has a strongly-typed subscribe parameter, but the

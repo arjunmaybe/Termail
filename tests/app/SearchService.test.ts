@@ -230,3 +230,127 @@ describe('SearchService', () => {
     expect(r3.limit).toBe(SEARCH_MAX_LIMIT);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3.3 — searchParsed
+// ---------------------------------------------------------------------------
+
+describe('SearchService.searchParsed', () => {
+  let testDbPath: string;
+  let testConfigPath: string;
+  let service: SearchService;
+  let configStore: ReturnType<typeof getConfigStore>;
+  let db: ReturnType<typeof getDatabase>;
+  let messageRepo: MessageRepository;
+
+  beforeEach(async () => {
+    resetDatabase();
+    resetConfigStore();
+    testConfigPath = join(tmpdir(), `termail-ssvc2-${Date.now()}-${Math.random()}-config.json`);
+    testDbPath = join(tmpdir(), `termail-ssvc2-${Date.now()}-${Math.random()}.sqlite`);
+
+    configStore = getConfigStore(testConfigPath);
+    await configStore.initialize();
+    await configStore.updateConfig({ database: { path: testDbPath } } as Partial<AppConfig>);
+
+    db = getDatabase(configStore.getConfig());
+    await db.initialize();
+    messageRepo = new MessageRepository(db);
+    service = new SearchService(db);
+
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'Budget review', isRead: false }),
+      makeMessage({ uid: 2, subject: 'Lunch tomorrow?', isRead: true }),
+      makeMessage({
+        uid: 3,
+        subject: 'Receipt for invoice',
+        isRead: true,
+        attachments: [{ filename: 'a.txt', contentType: 'text/plain', size: 1, disposition: 'attachment' }],
+      }),
+    ]);
+  });
+
+  afterEach(() => {
+    resetDatabase();
+    resetConfigStore();
+    for (const p of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`, testConfigPath]) {
+      if (existsSync(p)) rmSync(p);
+    }
+  });
+
+  it('returns empty hits and an empty issues array when no fields are set', () => {
+    const result = service.searchParsed({ text: '' });
+    expect(result.ok).toBe(true);
+    expect(result.hits).toEqual([]);
+    expect(result.issues).toEqual([]);
+    expect(result.error).toBeUndefined();
+  });
+
+  it('translates text-only into the FTS5 path', () => {
+    const result = service.searchParsed({ text: 'budget' });
+    expect(result.hits).toHaveLength(1);
+    expect(result.hits[0]?.email.subject).toBe('Budget review');
+    expect(result.issues).toEqual([]);
+  });
+
+  it('translates isUnread into isRead=false', () => {
+    const result = service.searchParsed({ text: '', isUnread: true });
+    expect(result.hits).toHaveLength(1);
+    expect(result.hits[0]?.email.subject).toBe('Budget review');
+  });
+
+  it('translates hasAttachment=true', () => {
+    const result = service.searchParsed({ text: '', hasAttachment: true });
+    expect(result.hits).toHaveLength(1);
+    expect(result.hits[0]?.email.hasAttachments).toBe(true);
+  });
+
+  it('translates after / before into epoch-second filters', () => {
+    const result = service.searchParsed({
+      text: '',
+      after: '2026-01-01',
+      before: '2026-12-31',
+    });
+    expect(result.hits).toHaveLength(3);
+  });
+
+  it('translates subject / from / to', () => {
+    const r1 = service.searchParsed({ text: '', subject: 'lunch' });
+    expect(r1.hits).toHaveLength(1);
+    expect(r1.hits[0]?.email.subject).toBe('Lunch tomorrow?');
+  });
+
+  it('translates folder path', () => {
+    const result = service.searchParsed({ text: '', folder: 'INBOX' });
+    expect(result.hits).toHaveLength(3);
+  });
+
+  it('combines multiple fields with AND semantics', () => {
+    // `isRead: true` AND `subject` includes "lunch" -> exactly one hit.
+    const result = service.searchParsed({ text: '', isRead: true, subject: 'lunch' });
+    expect(result.hits).toHaveLength(1);
+    expect(result.hits[0]?.email.subject).toBe('Lunch tomorrow?');
+  });
+
+  it('passes accountId and limit through to the repository', () => {
+    const result = service.searchParsed({ text: '', isRead: true }, { accountId: 'work', limit: 1 });
+    expect(result.hits).toHaveLength(1);
+    expect(result.limit).toBe(1);
+  });
+
+  it('clamps an over-large limit to SEARCH_MAX_LIMIT', () => {
+    const result = service.searchParsed({ text: '' }, { limit: 999_999 });
+    expect(result.limit).toBe(SEARCH_MAX_LIMIT);
+  });
+
+  it('reports a repository error and never throws', () => {
+    // Close the database so the next query throws; the service
+    // must surface the error rather than re-throw.
+    db.close();
+    const result = service.searchParsed({ text: 'budget' });
+    expect(result.ok).toBe(true);
+    expect(result.hits).toEqual([]);
+    expect(result.issues).toEqual([]);
+    expect(typeof result.error).toBe('string');
+  });
+});

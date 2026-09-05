@@ -465,3 +465,222 @@ describe('SearchRepository', () => {
     expect(hits[0]!.email.id).toBe('work:work:INBOX:1');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3.3 — searchStructured
+// ---------------------------------------------------------------------------
+
+describe('SearchRepository.searchStructured', () => {
+  let testDbPath: string;
+  let testConfigPath: string;
+  let repo: SearchRepository;
+  let messageRepo: MessageRepository;
+  let configStore: ReturnType<typeof getConfigStore>;
+  let db: ReturnType<typeof getDatabase>;
+
+  beforeEach(async () => {
+    resetDatabase();
+    resetConfigStore();
+    testConfigPath = join(tmpdir(), `termail-sr2-${Date.now()}-${Math.random()}-config.json`);
+    testDbPath = join(tmpdir(), `termail-sr2-${Date.now()}-${Math.random()}.sqlite`);
+
+    configStore = getConfigStore(testConfigPath);
+    await configStore.initialize();
+    await configStore.updateConfig({ database: { path: testDbPath } } as Partial<AppConfig>);
+
+    db = getDatabase(configStore.getConfig());
+    await db.initialize();
+    messageRepo = new MessageRepository(db);
+    repo = new SearchRepository(db);
+  });
+
+  afterEach(() => {
+    resetDatabase();
+    resetConfigStore();
+    for (const p of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`, testConfigPath]) {
+      if (existsSync(p)) rmSync(p);
+    }
+  });
+
+  function epoch(date: Date): number {
+    return Math.floor(date.getTime() / 1000);
+  }
+
+  it('returns all rows for an empty options object (service-layer short-circuits to [] for this case)', () => {
+    // The repository has no notion of "empty query". The service
+    // is responsible for short-circuiting when no fields are set.
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'whatever' }),
+    ]);
+    const hits = repo.searchStructured({});
+    expect(hits).toHaveLength(1);
+  });
+
+  it('subject filter matches case-insensitively', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'Quarterly budget review' }),
+      makeMessage({ uid: 2, subject: 'Lunch tomorrow?' }),
+    ]);
+    const hits = repo.searchStructured({ subject: 'QUARTERLY' });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.email.subject).toBe('Quarterly budget review');
+  });
+
+  it('from filter matches substring against from_addresses', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({
+        uid: 1,
+        subject: 'whatever',
+        from: [makeAddress('Samantha Carter', 'samantha@example.com')],
+      }),
+    ]);
+    const hits = repo.searchStructured({ from: 'samantha' });
+    expect(hits).toHaveLength(1);
+  });
+
+  it('to filter matches substring against to_addresses', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({
+        uid: 1,
+        subject: 'whatever',
+        to: [makeAddress('Daniel Jackson', 'daniel@example.com')],
+      }),
+    ]);
+    const hits = repo.searchStructured({ to: 'daniel' });
+    expect(hits).toHaveLength(1);
+  });
+
+  it('isRead=true returns only read messages', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'read', isRead: true }),
+      makeMessage({ uid: 2, subject: 'unread', isRead: false }),
+    ]);
+    const hits = repo.searchStructured({ isRead: true });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.email.isRead).toBe(true);
+  });
+
+  it('isRead=false returns only unread messages', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'read', isRead: true }),
+      makeMessage({ uid: 2, subject: 'unread', isRead: false }),
+    ]);
+    const hits = repo.searchStructured({ isRead: false });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.email.isRead).toBe(false);
+  });
+
+  it('hasAttachment=true returns only messages with attachments', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'with', attachments: [{ filename: 'a.txt', contentType: 'text/plain', size: 1, disposition: 'attachment' }] }),
+      makeMessage({ uid: 2, subject: 'without', attachments: [] }),
+    ]);
+    const hits = repo.searchStructured({ hasAttachment: true });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.email.hasAttachments).toBe(true);
+  });
+
+  it('after filter includes messages on or after the bound', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'old', internalDate: new Date('2025-01-01T00:00:00Z') }),
+      makeMessage({ uid: 2, subject: 'new', internalDate: new Date('2026-06-01T00:00:00Z') }),
+    ]);
+    const hits = repo.searchStructured({ after: epoch(new Date('2026-01-01T00:00:00Z')) });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.email.subject).toBe('new');
+  });
+
+  it('before filter includes messages on or before the bound', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'old', internalDate: new Date('2025-01-01T00:00:00Z') }),
+      makeMessage({ uid: 2, subject: 'new', internalDate: new Date('2026-06-01T00:00:00Z') }),
+    ]);
+    const hits = repo.searchStructured({ before: epoch(new Date('2025-12-31T23:59:59Z')) });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.email.subject).toBe('old');
+  });
+
+  it('after + before together form a closed range', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'a', internalDate: new Date('2025-01-01T00:00:00Z') }),
+      makeMessage({ uid: 2, subject: 'b', internalDate: new Date('2025-12-01T00:00:00Z') }),
+      makeMessage({ uid: 3, subject: 'c', internalDate: new Date('2026-06-01T00:00:00Z') }),
+    ]);
+    const hits = repo.searchStructured({
+      after: epoch(new Date('2025-06-01T00:00:00Z')),
+      before: epoch(new Date('2026-01-01T00:00:00Z')),
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.email.subject).toBe('b');
+  });
+
+  it('accountId scopes results to one account', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'work' }),
+    ]);
+    messageRepo.upsertMessages(otherAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'personal', accountId: 'personal' }),
+    ]);
+    const hits = repo.searchStructured({ accountId: 'work' });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.email.accountId).toBe('work');
+  });
+
+  it('folder filter resolves to f.full_name (case-insensitive)', () => {
+    messageRepo.upsertMessages(baseAccount, sentFolder, [
+      makeMessage({ uid: 1, subject: 'a', folder: 'Sent' }),
+    ]);
+    // `folders` rows come from upsertMessages; pass via folder path.
+    const hits = repo.searchStructured({ folder: 'sent' });
+    expect(hits).toHaveLength(1);
+  });
+
+  it('text + structured filters AND together (FTS5 path)', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'budget review', isRead: false }),
+      makeMessage({ uid: 2, subject: 'budget approval', isRead: true }),
+    ]);
+    // "budget" matches both via FTS5, but `isRead: true` narrows to one.
+    const hits = repo.searchStructured({ text: 'budget', isRead: true });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.email.subject).toBe('budget approval');
+  });
+
+  it('text + structured filters AND together (non-FTS5 path)', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'budget', isRead: false }),
+      makeMessage({ uid: 2, subject: 'budget', isRead: true }),
+    ]);
+    // FTS5 sanitizer strips to nothing -> structured path. The
+    // `isRead` filter narrows to one.
+    const hits = repo.searchStructured({ text: '!!!', isRead: true });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.email.isRead).toBe(true);
+  });
+
+  it('folderId without accountId short-circuits to []', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'a' }),
+    ]);
+    expect(repo.searchStructured({ folderId: 'work:INBOX' })).toEqual([]);
+  });
+
+  it('orders by internal_date DESC, id ASC when no text is given', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'a', internalDate: new Date('2026-01-01T00:00:00Z') }),
+      makeMessage({ uid: 2, subject: 'b', internalDate: new Date('2026-06-01T00:00:00Z') }),
+      makeMessage({ uid: 3, subject: 'c', internalDate: new Date('2026-03-01T00:00:00Z') }),
+    ]);
+    const hits = repo.searchStructured({ isRead: false });
+    // 'b' is most recent, then 'c', then 'a'.
+    expect(hits.map((h) => h.email.subject)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('clamps an over-large limit to SEARCH_MAX_LIMIT', () => {
+    messageRepo.upsertMessages(baseAccount, inboxFolder, [
+      makeMessage({ uid: 1, subject: 'a' }),
+    ]);
+    const hits = repo.searchStructured({ isRead: false, limit: SEARCH_MAX_LIMIT * 10 });
+    expect(hits.length).toBeLessThanOrEqual(SEARCH_MAX_LIMIT);
+  });
+});
