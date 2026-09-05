@@ -10,6 +10,12 @@ export type {
   ImapConnectionOptions,
   ImapFolderInfo,
   ImapFlowFactory,
+  EmailAddress,
+  SyncAttachment,
+  SyncMessage,
+  MessageSyncResult,
+  MessageSyncLimits,
+  MessageSyncOptions,
 } from './types.js';
 export {
   type ResolvedCredentials,
@@ -26,6 +32,25 @@ export {
   normalizeMailboxEntry,
   syncMailboxes,
 } from './folders.js';
+export {
+  buildFetchQuery,
+  buildFetchRange,
+  dedupeMessages,
+  extractBodyAsync,
+  htmlToPlainText,
+  mapAttachment,
+  normalizeDate,
+  normalizeFetchedMessage,
+  normalizeMessageId,
+  parseEnvelopeAddresses,
+  planBatches,
+  resolveLimits,
+  sortNewestFirst,
+  flagsToBooleans,
+  DEFAULT_BATCH_SIZE,
+  DEFAULT_MAX_MESSAGES,
+  DEFAULT_MAX_SOURCE_BYTES,
+} from './messages.js';
 export {
   ImapService,
   type ImapServiceOptions,

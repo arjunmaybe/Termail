@@ -6,12 +6,14 @@
  *   - Connect and authenticate (TLS, STARTTLS, or cleartext per config).
  *   - List mailboxes/folders (raw and normalized).
  *   - Synchronize folders: classify, dedupe, and order.
+ *   - Synchronize messages: fetch, parse, normalize, dedupe.
  *   - Disconnect gracefully.
  *
  * Out of scope:
- *   - Fetching messages.
  *   - IDLE / push notifications.
  *   - Caching mailboxes or sync state on disk.
+ *   - Saving emails to the database (Phase 2.4).
+ *   - Downloading attachment bodies.
  *
  * The service is deliberately small: it does NOT store credentials, does NOT
  * hold a password past the connect() call, and does NOT log credentials. If
@@ -26,7 +28,23 @@ import { logger } from '../utils/logger.js';
 import { type ResolvedCredentials, resolveCredentials } from './credentials.js';
 import type { FolderSyncResult } from './folders.js';
 import { syncMailboxes } from './folders.js';
-import type { ImapAccountConfig, ImapFlowFactory, ImapFolderInfo } from './types.js';
+import {
+  buildFetchQuery,
+  dedupeMessages,
+  extractBodyAsync,
+  normalizeFetchedMessage,
+  planBatches,
+  resolveLimits,
+  sortNewestFirst,
+} from './messages.js';
+import type {
+  ImapAccountConfig,
+  ImapFlowFactory,
+  ImapFolderInfo,
+  MessageSyncOptions,
+  MessageSyncResult,
+  SyncMessage,
+} from './types.js';
 
 /** Default factory: produces real `ImapFlow` instances. */
 const defaultFactory: ImapFlowFactory = {
@@ -211,6 +229,96 @@ export class ImapService {
       flags: entry.flags ?? new Set<string>(),
       specialUse: entry.specialUse,
     }));
+  }
+
+  /**
+   * Fetch and normalize messages from a single folder. Opens the
+   * mailbox in read-only mode, fetches in batches with a hard cap on
+   * messages and per-message source bytes, runs each batch through
+   * `mailparser`, normalizes, and dedupes. The mailbox is closed when
+   * the sync completes (success or failure); the underlying IMAP
+   * connection stays open.
+   *
+   * Errors are mapped through the same path as `connect()` and
+   * `listMailboxes()`: `AuthenticationError` for auth failures,
+   * `NetworkError` for everything else. The resolved secret is
+   * redacted from any thrown message.
+   */
+  async syncMessages(
+    folderPath: string,
+    options: MessageSyncOptions = {}
+  ): Promise<MessageSyncResult> {
+    if (!this.client) {
+      await this.connect();
+    }
+    const client = this.requireClient();
+    const secret = this.lastCredentials?.secret ?? '';
+    const accountId = this.account.id;
+    const limits = resolveLimits(options.limits);
+
+    let mailbox;
+    try {
+      mailbox = await client.mailboxOpen(folderPath, { readOnly: true });
+    } catch (error) {
+      throw mapConnectionError(error, secret);
+    }
+
+    try {
+      const upperUid = Number(mailbox.uidNext) - 1;
+      const batches = planBatches({
+        upperUid,
+        sinceUid: limits.sinceUid ?? 0,
+        batchSize: limits.batchSize,
+        maxMessages: limits.maxMessages,
+      });
+
+      const query = buildFetchQuery(limits.maxSourceBytes);
+      const receivedAt = new Date();
+      const collected: SyncMessage[] = [];
+      let total = 0;
+
+      for (const batch of batches) {
+        const range = `${batch.from}:${batch.to}`;
+        let raw: Awaited<ReturnType<typeof client.fetchAll>>;
+        try {
+          raw = await client.fetchAll(range, query);
+        } catch (error) {
+          throw mapConnectionError(error, secret);
+        }
+        for (const entry of raw) {
+          total += 1;
+          const body = await extractBodyAsync(entry);
+          const normalized = await normalizeFetchedMessage({
+            accountId,
+            folder: folderPath,
+            receivedAt,
+            raw: entry,
+            body,
+          });
+          collected.push(normalized);
+        }
+      }
+
+      const deduped = dedupeMessages(collected);
+      const messages = sortNewestFirst(deduped.unique);
+      return {
+        folder: folderPath,
+        total,
+        parsed: messages.length,
+        deduped: deduped.deduped,
+        messages,
+      };
+    } finally {
+      try {
+        await client.mailboxClose();
+      } catch (error) {
+        logger.warn('IMAP mailboxClose failed; ignoring', {
+          accountId: this.account.id,
+          folder: folderPath,
+          error: redactMessage(getErrorMessage(error), /* secret= */ ''),
+        });
+      }
+    }
   }
 
   private requireClient(): ImapFlow {
