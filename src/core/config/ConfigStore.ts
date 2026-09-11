@@ -72,6 +72,7 @@ export class ConfigStore {
       database: { ...this.config.database, ...(updates.database ?? {}) },
       ui: { ...this.config.ui, ...(updates.ui ?? {}) },
       accounts: (updates.accounts as AppConfig['accounts'] | undefined) ?? this.config.accounts,
+      ai: { ...this.config.ai, ...(updates.ai ?? {}) },
     };
     const validated = validateConfig(merged);
     await this.save(validated);

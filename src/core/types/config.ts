@@ -7,6 +7,7 @@ export interface AppConfig {
   database: DatabaseConfig;
   ui: UiConfig;
   accounts: AccountConfig[];
+  ai: AiConfig;
 }
 
 export interface DatabaseConfig {
@@ -22,6 +23,22 @@ export interface UiConfig {
 }
 
 export type SmtpMode = 'implicit-tls' | 'starttls';
+
+/** AI assistance settings (Phase 5). Disabled by default; opt-in per user. */
+export interface AiConfig {
+  /** Master switch. When false, no AI request is ever issued. */
+  enabled: boolean;
+  /** Provider id. Only 'openrouter' is supported in Phase 5. */
+  provider: 'openrouter';
+  /** Model id passed to the provider. Configurable; no free-tier assumption. */
+  model: string;
+  /** Chat-completions endpoint. Defaults to OpenRouter; overridable for gateways. */
+  endpoint: string;
+  /** Max email body characters sent per request (cost/privacy bound). */
+  maxBodyChars: number;
+  /** Per-request timeout in milliseconds. */
+  requestTimeoutMs: number;
+}
 
 export interface AccountConfig {
   id: string;
@@ -54,6 +71,15 @@ export interface AccountConfig {
 export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> } : T;
 
 // Default configuration
+export const DEFAULT_AI_CONFIG: AiConfig = {
+  enabled: false,
+  provider: 'openrouter',
+  model: 'meta-llama/llama-3.3-70b-instruct',
+  endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+  maxBodyChars: 8000,
+  requestTimeoutMs: 30000,
+};
+
 export const DEFAULT_CONFIG: AppConfig = {
   version: 1,
   database: {
@@ -67,6 +93,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     compactMode: false,
   },
   accounts: [],
+  ai: { ...DEFAULT_AI_CONFIG },
 };
 
 // Config file paths
