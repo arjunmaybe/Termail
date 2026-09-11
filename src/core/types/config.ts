@@ -21,6 +21,8 @@ export interface UiConfig {
   compactMode: boolean;
 }
 
+export type SmtpMode = 'implicit-tls' | 'starttls';
+
 export interface AccountConfig {
   id: string;
   name: string;
@@ -36,6 +38,16 @@ export interface AccountConfig {
   username?: string;
   useTls: boolean;
   authType: 'password' | 'oauth2';
+  // SMTP settings (Phase 4). All optional for backward compatibility.
+  // `smtpMode` is explicit and is NEVER inferred from IMAP `useTls`.
+  // Resolution (see `resolveSmtpConfig`):
+  //   - no smtpPort + no smtpMode -> implicit-tls, port 465
+  //   - smtpPort only -> 465 means implicit-tls, any other port means starttls
+  //   - smtpMode only -> implicit-tls uses 465, starttls uses 587
+  //   - explicit smtpPort always wins.
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpMode?: SmtpMode;
 }
 
 /** Deep-partial type that allows nested fields to be omitted. */

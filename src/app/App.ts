@@ -16,6 +16,8 @@ import { ContentPane } from './layout/ContentPane.js';
 import { Sidebar } from './layout/Sidebar.js';
 import { StatusBar } from './layout/StatusBar.js';
 import { SearchController } from './services/SearchController.js';
+import { ComposeController } from './services/ComposeController.js';
+import { SmtpService } from '../core/smtp/SmtpService.js';
 import { type SyncOutcome, SyncService } from './services/SyncService.js';
 import { type Theme, getTheme } from './theme.js';
 
@@ -24,6 +26,8 @@ export interface AppOptions {
   initialTheme?: 'dark' | 'light';
   /** Optional injected `SyncService` (tests can supply a fake). */
   syncService?: SyncService;
+  /** Optional injected `SmtpService` (tests can supply a fake). */
+  smtpService?: SmtpService;
 }
 
 export class App extends BoxRenderable {
@@ -39,6 +43,8 @@ export class App extends BoxRenderable {
   private initError: string | null = null;
   private syncService: SyncService;
   private searchController: SearchController | null = null;
+  private smtpService: SmtpService | null = null;
+  private composeController: ComposeController | null = null;
   private syncInFlight: Set<string> = new Set();
   private lastLoadedFolderId: string | null = null;
 
@@ -98,6 +104,8 @@ export class App extends BoxRenderable {
     // The `SyncService` is constructed lazily inside `initialize()` once
     // the database is ready, unless the caller injected one (tests).
     this.syncService = options.syncService as SyncService | undefined as SyncService;
+    // Phase 4 — optional injected `SmtpService` (tests). Built lazily below.
+    this.smtpService = options.smtpService ?? null;
 
     this.initialize();
   }
@@ -124,6 +132,18 @@ export class App extends BoxRenderable {
       // `SearchService`. There is no test fake; the controller is a
       // pure dispatcher on top of the real service.
       this.searchController = new SearchController(database);
+
+      // Phase 4 — compose stack (no DB, no background work). The service
+      // is stateless; the controller reads the current account from state.
+      if (!this.smtpService) {
+        this.smtpService = new SmtpService();
+      }
+      this.composeController = new ComposeController(this.smtpService, () => {
+        const accountId = selectors.currentAccountId;
+        if (!accountId) return null;
+        const account = selectors.accounts.find((a) => a.id === accountId);
+        return account ? toAccountConfig(account) : null;
+      });
 
       // Seed state from config + DB.
       const configAccounts = config.accounts ?? [];
@@ -352,6 +372,50 @@ export class App extends BoxRenderable {
     this.searchController?.cancelSearch();
   }
 
+  // -----------------------------------------------------------------
+  // Phase 4 — Compose (TUI-facing API; no background sending).
+  // -----------------------------------------------------------------
+
+  isComposeActive(): boolean {
+    return this.composeController?.isActive() ?? false;
+  }
+
+  openCompose(): void {
+    this.composeController?.openCompose();
+  }
+
+  cancelCompose(): void {
+    this.composeController?.cancelCompose();
+  }
+
+  setComposeTo(to: string[]): void {
+    this.composeController?.setTo(to);
+  }
+
+  setComposeCc(cc: string[]): void {
+    this.composeController?.setCc(cc);
+  }
+
+  setComposeBcc(bcc: string[]): void {
+    this.composeController?.setBcc(bcc);
+  }
+
+  setComposeSubject(subject: string): void {
+    this.composeController?.setSubject(subject);
+  }
+
+  setComposeBody(body: string): void {
+    this.composeController?.setBody(body);
+  }
+
+  async submitCompose(): Promise<void> {
+    await this.composeController?.submitCompose();
+  }
+
+  getSmtpService(): SmtpService | null {
+    return this.smtpService;
+  }
+
   /**
    * Tear down the App and its child components. Used by tests to
    * release signal subscriptions before destroying the renderer.
@@ -379,6 +443,9 @@ function toAccountProjection(config: AccountConfig): Account {
     username: config.username,
     useTls: config.useTls,
     authType: config.authType,
+    smtpHost: config.smtpHost,
+    smtpPort: config.smtpPort,
+    smtpMode: config.smtpMode,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -396,6 +463,9 @@ function toAccountConfig(account: Account): AccountConfig {
     username: account.username,
     useTls: account.useTls,
     authType: account.authType,
+    smtpHost: account.smtpHost,
+    smtpPort: account.smtpPort,
+    smtpMode: account.smtpMode,
   };
 }
 

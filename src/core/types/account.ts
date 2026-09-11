@@ -16,6 +16,10 @@ export interface Account {
   useTls: boolean;
   authType: 'password' | 'oauth2';
   oauthConfig?: OAuthConfig;
+  // SMTP settings (Phase 4, optional, never inferred from IMAP fields).
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpMode?: 'implicit-tls' | 'starttls';
   createdAt: Date;
   updatedAt: Date;
 }

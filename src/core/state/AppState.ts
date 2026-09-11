@@ -60,6 +60,28 @@ export interface AppState {
    * submit. Surfaced as a "search failed" placeholder.
    */
   searchError: string | null;
+
+  // Compose state (Phase 4) — completely separate from search state.
+  // No persistence, no drafts, no Sent-folder writes. The controller
+  // owns orchestration; this is only the input buffer + send status.
+  /** True while the compose view is visible. */
+  composeActive: boolean;
+  /** To recipients (structured addresses). */
+  composeTo: string[];
+  /** Cc recipients. */
+  composeCc: string[];
+  /** Bcc recipients (envelope-only, never rendered). */
+  composeBcc: string[];
+  /** Plain-text subject (no CR/LF). */
+  composeSubject: string;
+  /** Plain-text body. */
+  composeBody: string;
+  /** True while a send is in flight. */
+  composeSending: boolean;
+  /** Error from the most recent send. Cleared on open/submit. */
+  composeError: string | null;
+  /** True after a successful send until the next open/cancel. */
+  composeSent: boolean;
 }
 
 // Internal signals
@@ -84,6 +106,17 @@ const _searchQuery = signal<string>('');
 const _searchActive = signal<boolean>(false);
 const _searchIssues = signal<ParseIssue[]>([]);
 const _searchError = signal<string | null>(null);
+
+// Compose state (Phase 4) — separate signals, never shared with search.
+const _composeActive = signal<boolean>(false);
+const _composeTo = signal<string[]>([]);
+const _composeCc = signal<string[]>([]);
+const _composeBcc = signal<string[]>([]);
+const _composeSubject = signal<string>('');
+const _composeBody = signal<string>('');
+const _composeSending = signal<boolean>(false);
+const _composeError = signal<string | null>(null);
+const _composeSent = signal<boolean>(false);
 
 // Computed signals
 const currentAccount = computed(() => {
@@ -304,6 +337,67 @@ export const actions = {
     _searchError.value = null;
   },
 
+  // Compose actions (Phase 4) — never touch search signals.
+  setComposeActive(active: boolean) {
+    _composeActive.value = active;
+  },
+
+  setComposeTo(to: string[]) {
+    _composeTo.value = to;
+  },
+
+  setComposeCc(cc: string[]) {
+    _composeCc.value = cc;
+  },
+
+  setComposeBcc(bcc: string[]) {
+    _composeBcc.value = bcc;
+  },
+
+  setComposeSubject(subject: string) {
+    _composeSubject.value = subject;
+  },
+
+  setComposeBody(body: string) {
+    _composeBody.value = body;
+  },
+
+  setComposeSending(sending: boolean) {
+    _composeSending.value = sending;
+  },
+
+  setComposeError(error: string | null) {
+    _composeError.value = error;
+  },
+
+  setComposeSent(sent: boolean) {
+    _composeSent.value = sent;
+  },
+
+  openCompose() {
+    _composeActive.value = true;
+    _composeTo.value = [];
+    _composeCc.value = [];
+    _composeBcc.value = [];
+    _composeSubject.value = '';
+    _composeBody.value = '';
+    _composeSending.value = false;
+    _composeError.value = null;
+    _composeSent.value = false;
+  },
+
+  clearCompose() {
+    _composeActive.value = false;
+    _composeTo.value = [];
+    _composeCc.value = [];
+    _composeBcc.value = [];
+    _composeSubject.value = '';
+    _composeBody.value = '';
+    _composeSending.value = false;
+    _composeError.value = null;
+    _composeSent.value = false;
+  },
+
   // Reset all state
   reset() {
     _accounts.value = [];
@@ -325,6 +419,16 @@ export const actions = {
     _searchActive.value = false;
     _searchIssues.value = [];
     _searchError.value = null;
+    // Compose state (Phase 4)
+    _composeActive.value = false;
+    _composeTo.value = [];
+    _composeCc.value = [];
+    _composeBcc.value = [];
+    _composeSubject.value = '';
+    _composeBody.value = '';
+    _composeSending.value = false;
+    _composeError.value = null;
+    _composeSent.value = false;
   },
 };
 
@@ -406,6 +510,34 @@ export const selectors = {
   get searchError() {
     return _searchError.value;
   },
+  // Compose selectors (Phase 4)
+  get composeActive() {
+    return _composeActive.value;
+  },
+  get composeTo() {
+    return _composeTo.value;
+  },
+  get composeCc() {
+    return _composeCc.value;
+  },
+  get composeBcc() {
+    return _composeBcc.value;
+  },
+  get composeSubject() {
+    return _composeSubject.value;
+  },
+  get composeBody() {
+    return _composeBody.value;
+  },
+  get composeSending() {
+    return _composeSending.value;
+  },
+  get composeError() {
+    return _composeError.value;
+  },
+  get composeSent() {
+    return _composeSent.value;
+  },
   subscribe(fn: () => void): () => void {
     return subscribe(fn);
   },
@@ -434,6 +566,16 @@ export function subscribe(fn: (state: AppState) => void): () => void {
     _searchActive,
     _searchIssues,
     _searchError,
+    // Compose state (Phase 4)
+    _composeActive,
+    _composeTo,
+    _composeCc,
+    _composeBcc,
+    _composeSubject,
+    _composeBody,
+    _composeSending,
+    _composeError,
+    _composeSent,
   ];
 
   // Each signal has a strongly-typed subscribe parameter, but the
