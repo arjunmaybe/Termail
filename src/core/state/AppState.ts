@@ -82,6 +82,19 @@ export interface AppState {
   composeError: string | null;
   /** True after a successful send until the next open/cancel. */
   composeSent: boolean;
+
+  // AI assistance state (Phase 5) — ephemeral view state, separate from
+  // search and compose. AI prompts/responses are never persisted.
+  /** Which AI task produced the current result, if any. */
+  aiMode: 'summary' | 'draft' | null;
+  /** AI result text for the currently selected email, if any. */
+  aiResult: string | null;
+  /** True while an AI request is in flight. */
+  aiLoading: boolean;
+  /** Error from the most recent AI request. Cleared on open/submit. */
+  aiError: string | null;
+  /** Id of the email the current AI result belongs to, if any. */
+  aiEmailId: string | null;
 }
 
 // Internal signals
@@ -117,6 +130,13 @@ const _composeBody = signal<string>('');
 const _composeSending = signal<boolean>(false);
 const _composeError = signal<string | null>(null);
 const _composeSent = signal<boolean>(false);
+
+// AI assistance state (Phase 5) — separate signals, never shared.
+const _aiMode = signal<'summary' | 'draft' | null>(null);
+const _aiResult = signal<string | null>(null);
+const _aiLoading = signal<boolean>(false);
+const _aiError = signal<string | null>(null);
+const _aiEmailId = signal<string | null>(null);
 
 // Computed signals
 const currentAccount = computed(() => {
@@ -398,6 +418,35 @@ export const actions = {
     _composeSent.value = false;
   },
 
+  // AI assistance actions (Phase 5) — never touch search/compose signals.
+  setAiMode(mode: 'summary' | 'draft' | null) {
+    _aiMode.value = mode;
+  },
+
+  setAiResult(result: string | null) {
+    _aiResult.value = result;
+  },
+
+  setAiLoading(loading: boolean) {
+    _aiLoading.value = loading;
+  },
+
+  setAiError(error: string | null) {
+    _aiError.value = error;
+  },
+
+  setAiEmailId(emailId: string | null) {
+    _aiEmailId.value = emailId;
+  },
+
+  clearAi() {
+    _aiMode.value = null;
+    _aiResult.value = null;
+    _aiLoading.value = false;
+    _aiError.value = null;
+    _aiEmailId.value = null;
+  },
+
   // Reset all state
   reset() {
     _accounts.value = [];
@@ -429,6 +478,12 @@ export const actions = {
     _composeSending.value = false;
     _composeError.value = null;
     _composeSent.value = false;
+    // AI assistance state (Phase 5)
+    _aiMode.value = null;
+    _aiResult.value = null;
+    _aiLoading.value = false;
+    _aiError.value = null;
+    _aiEmailId.value = null;
   },
 };
 
@@ -538,6 +593,22 @@ export const selectors = {
   get composeSent() {
     return _composeSent.value;
   },
+  // AI assistance selectors (Phase 5)
+  get aiMode() {
+    return _aiMode.value;
+  },
+  get aiResult() {
+    return _aiResult.value;
+  },
+  get aiLoading() {
+    return _aiLoading.value;
+  },
+  get aiError() {
+    return _aiError.value;
+  },
+  get aiEmailId() {
+    return _aiEmailId.value;
+  },
   subscribe(fn: () => void): () => void {
     return subscribe(fn);
   },
@@ -576,6 +647,12 @@ export function subscribe(fn: (state: AppState) => void): () => void {
     _composeSending,
     _composeError,
     _composeSent,
+    // AI assistance state (Phase 5)
+    _aiMode,
+    _aiResult,
+    _aiLoading,
+    _aiError,
+    _aiEmailId,
   ];
 
   // Each signal has a strongly-typed subscribe parameter, but the

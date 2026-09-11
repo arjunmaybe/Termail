@@ -8,6 +8,7 @@ import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import type { AppConfig } from '../../src/core/types/config.js';
+import { DEFAULT_AI_CONFIG } from '../../src/core/types/config.js';
 
 describe('ConfigStore', () => {
   let testConfigPath: string;
@@ -59,6 +60,7 @@ describe('ConfigStore', () => {
           authType: 'password',
         },
       ],
+      ai: { ...DEFAULT_AI_CONFIG },
     };
 
     // Create config store, initialize, then create a new one with same path

@@ -25,6 +25,10 @@ export function mergeWithDefaults(config: Partial<AppConfig>): AppConfig {
       ...(config.ui as Partial<AppConfig['ui']> | undefined),
     },
     accounts: config.accounts ?? DEFAULT_CONFIG.accounts,
+    ai: {
+      ...DEFAULT_CONFIG.ai,
+      ...(config.ai as Partial<AppConfig['ai']> | undefined),
+    },
   };
 }
 

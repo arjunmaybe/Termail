@@ -73,6 +73,18 @@ async function main(): Promise<void> {
           // Phase 3.3: open the search input bar.
           app.openSearch();
           break;
+        case 's':
+          // Phase 5: summarize the selected email (detail pane).
+          if (!key.ctrl) {
+            void app.summarizeSelectedEmail();
+          }
+          break;
+        case 'd':
+          // Phase 5: draft a reply into compose for review. Never sends.
+          if (!key.ctrl) {
+            void app.draftReplyWithAi();
+          }
+          break;
         default:
           break;
       }

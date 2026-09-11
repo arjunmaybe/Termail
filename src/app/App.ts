@@ -17,7 +17,9 @@ import { Sidebar } from './layout/Sidebar.js';
 import { StatusBar } from './layout/StatusBar.js';
 import { SearchController } from './services/SearchController.js';
 import { ComposeController } from './services/ComposeController.js';
+import { AiController } from './services/AiController.js';
 import { SmtpService } from '../core/smtp/SmtpService.js';
+import { AiService } from '../core/ai/AiService.js';
 import { type SyncOutcome, SyncService } from './services/SyncService.js';
 import { type Theme, getTheme } from './theme.js';
 
@@ -28,6 +30,8 @@ export interface AppOptions {
   syncService?: SyncService;
   /** Optional injected `SmtpService` (tests can supply a fake). */
   smtpService?: SmtpService;
+  /** Optional injected `AiService` (tests can supply a fake). */
+  aiService?: AiService;
 }
 
 export class App extends BoxRenderable {
@@ -45,6 +49,8 @@ export class App extends BoxRenderable {
   private searchController: SearchController | null = null;
   private smtpService: SmtpService | null = null;
   private composeController: ComposeController | null = null;
+  private aiService: AiService | null = null;
+  private aiController: AiController | null = null;
   private syncInFlight: Set<string> = new Set();
   private lastLoadedFolderId: string | null = null;
 
@@ -106,6 +112,8 @@ export class App extends BoxRenderable {
     this.syncService = options.syncService as SyncService | undefined as SyncService;
     // Phase 4 — optional injected `SmtpService` (tests). Built lazily below.
     this.smtpService = options.smtpService ?? null;
+    // Phase 5 — optional injected `AiService` (tests). Built lazily below.
+    this.aiService = options.aiService ?? null;
 
     this.initialize();
   }
@@ -144,6 +152,14 @@ export class App extends BoxRenderable {
         const account = selectors.accounts.find((a) => a.id === accountId);
         return account ? toAccountConfig(account) : null;
       });
+
+      // Phase 5 — AI stack (no DB, no background work). Reads the AI
+      // section of the already-loaded config; the controller reads the
+      // selected email from state, mirroring the detail pane lookup.
+      if (!this.aiService) {
+        this.aiService = new AiService({ config: config.ai });
+      }
+      this.aiController = new AiController(this.aiService, () => getSelectedEmail());
 
       // Seed state from config + DB.
       const configAccounts = config.accounts ?? [];
@@ -416,6 +432,50 @@ export class App extends BoxRenderable {
     return this.smtpService;
   }
 
+  // -----------------------------------------------------------------
+  // Phase 5 — AI assistance (TUI-facing API; display text only, never
+  // auto-sends; drafts are routed into the compose flow for review).
+  // -----------------------------------------------------------------
+
+  /** True while an AI request is in flight. */
+  isAiLoading(): boolean {
+    return this.aiController?.isLoading() ?? false;
+  }
+
+  /** Summarize the currently selected email into the detail pane. */
+  async summarizeSelectedEmail(): Promise<void> {
+    await this.aiController?.summarizeSelected();
+  }
+
+  /**
+   * Draft a reply to the currently selected email. On success the draft
+   * is loaded into compose (To = original sender, Subject = Re: …) for
+   * user review/editing. Never sends.
+   */
+  async draftReplyWithAi(): Promise<void> {
+    const outcome = await this.aiController?.draftReplySelected();
+    if (!outcome || outcome.kind !== 'ok') return;
+    const email = getSelectedEmail();
+    if (!email) return;
+    const sender = email.fromAddresses[0]?.address;
+    this.composeController?.openCompose();
+    this.composeController?.setTo(sender !== undefined ? [sender] : []);
+    const subject = email.subject;
+    this.composeController?.setSubject(
+      /^re:/i.test(subject) ? subject : `Re: ${subject}`
+    );
+    this.composeController?.setBody(outcome.text);
+  }
+
+  /** Clear any AI result/error. */
+  cancelAi(): void {
+    this.aiController?.clearAi();
+  }
+
+  getAiService(): AiService | null {
+    return this.aiService;
+  }
+
   /**
    * Tear down the App and its child components. Used by tests to
    * release signal subscriptions before destroying the renderer.
@@ -429,6 +489,18 @@ export class App extends BoxRenderable {
     this.errorBanner.destroy();
     this.banner.destroy();
   }
+}
+
+/**
+ * Resolve the currently selected email from state, checking the search
+ * hits first when a search is active. Mirrors the `ContentPane` lookup so
+ * the AI controller and the detail pane always agree on "selected".
+ */
+function getSelectedEmail(): PersistedEmail | null {
+  const selectedId = selectors.selectedEmailId;
+  if (!selectedId) return null;
+  const source = selectors.searchActive ? (selectors.searchHits ?? []) : selectors.emails;
+  return source.find((e) => e.id === selectedId) ?? null;
 }
 
 /** Project an `AccountConfig` to the UI-side `Account` shape. */

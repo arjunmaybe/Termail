@@ -3,7 +3,13 @@
  */
 
 import { z } from 'zod';
-import type { AccountConfig, AppConfig, DatabaseConfig, UiConfig } from '../types/config.js';
+import type {
+  AccountConfig,
+  AiConfig,
+  AppConfig,
+  DatabaseConfig,
+  UiConfig,
+} from '../types/config.js';
 
 export const databaseConfigSchema = z.object({
   path: z.string().min(1),
@@ -84,11 +90,33 @@ export function resolveSmtpDefaults(input: {
   return { smtpPort: 465, smtpMode: 'implicit-tls' };
 }
 
+/**
+ * AI assistance settings (Phase 5). Disabled by default; the user opts in
+ * explicitly. The API key is NEVER stored here — it comes from the
+ * `TERMAIL_AI_API_KEY` environment variable at request time.
+ */
+export const aiConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  provider: z.enum(['openrouter']).default('openrouter'),
+  model: z.string().min(1).default('meta-llama/llama-3.3-70b-instruct'),
+  endpoint: z.string().url().default('https://openrouter.ai/api/v1/chat/completions'),
+  maxBodyChars: z.number().int().min(500).max(100000).default(8000),
+  requestTimeoutMs: z.number().int().min(1000).max(300000).default(30000),
+});
+
 export const appConfigSchema = z.object({
   version: z.number().int().positive().default(1),
   database: databaseConfigSchema,
   ui: uiConfigSchema,
   accounts: z.array(accountConfigSchema).default([]),
+  ai: aiConfigSchema.default({
+    enabled: false,
+    provider: 'openrouter',
+    model: 'meta-llama/llama-3.3-70b-instruct',
+    endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    maxBodyChars: 8000,
+    requestTimeoutMs: 30000,
+  }),
 });
 
 // Type assertion: Zod's input/output types differ (defaults are optional in
@@ -102,6 +130,11 @@ const _uiAssert: z.ZodType<UiConfig, z.ZodTypeDef, UiConfig> = uiConfigSchema as
 >;
 const _accountAssert: z.ZodType<AccountConfig, z.ZodTypeDef, AccountConfig> =
   accountConfigSchema as z.ZodType<AccountConfig, z.ZodTypeDef, AccountConfig>;
+const _aiAssert: z.ZodType<AiConfig, z.ZodTypeDef, AiConfig> = aiConfigSchema as z.ZodType<
+  AiConfig,
+  z.ZodTypeDef,
+  AiConfig
+>;
 const _appAssert: z.ZodType<AppConfig, z.ZodTypeDef, AppConfig> = appConfigSchema as z.ZodType<
   AppConfig,
   z.ZodTypeDef,
@@ -110,6 +143,7 @@ const _appAssert: z.ZodType<AppConfig, z.ZodTypeDef, AppConfig> = appConfigSchem
 void _databaseAssert;
 void _uiAssert;
 void _accountAssert;
+void _aiAssert;
 void _appAssert;
 
 export function validateConfig(config: unknown): AppConfig {

@@ -37,6 +37,10 @@ export class ContentPane extends BoxRenderable {
   private detailAttachments: TextRenderable;
   private detailSeparator: TextRenderable;
   private detailBody: TextRenderable;
+  // Phase 5 — AI result section (detail pane only, no new UI system).
+  private aiSeparator: TextRenderable;
+  private aiHeader: TextRenderable;
+  private aiBody: TextRenderable;
   private unsubscribe: (() => void) | null = null;
 
   constructor(ctx: RenderContext, options: ContentPaneOptions) {
@@ -106,6 +110,22 @@ export class ContentPane extends BoxRenderable {
       content: '',
       fg: theme.textPrimary,
     });
+    this.aiSeparator = new TextRenderable(ctx, {
+      id: 'email-detail-ai-sep',
+      content: '',
+      fg: theme.border,
+    });
+    this.aiHeader = new TextRenderable(ctx, {
+      id: 'email-detail-ai-header',
+      content: '',
+      fg: theme.textSecondary,
+      attributes: TextAttributes.BOLD,
+    });
+    this.aiBody = new TextRenderable(ctx, {
+      id: 'email-detail-ai-body',
+      content: '',
+      fg: theme.textPrimary,
+    });
     this.emailDetail = new BoxRenderable(ctx, {
       id: 'email-detail',
       flexDirection: 'column',
@@ -120,6 +140,9 @@ export class ContentPane extends BoxRenderable {
     this.emailDetail.add(this.detailAttachments);
     this.emailDetail.add(this.detailSeparator);
     this.emailDetail.add(this.detailBody);
+    this.emailDetail.add(this.aiSeparator);
+    this.emailDetail.add(this.aiHeader);
+    this.emailDetail.add(this.aiBody);
 
     this.container.add(this.welcomeView);
     this.container.add(this.emailListView);
@@ -178,6 +201,57 @@ export class ContentPane extends BoxRenderable {
     this.detailBody.content = email.bodyText && email.bodyText.length > 0
       ? email.bodyText
       : '(no body)';
+    this.showAiSection(email.id);
+  }
+
+  /**
+   * Phase 5 — render the AI section below the body. Visible only when the
+   * AI result/error belongs to the email currently shown; stale results
+   * for other emails stay hidden via the `aiEmailId` gate.
+   */
+  private showAiSection(emailId: string): void {
+    const isCurrent = selectors.aiEmailId === emailId && emailId.length > 0;
+    if (selectors.aiLoading && (isCurrent || selectors.aiEmailId === null)) {
+      this.aiSeparator.content = '─'.repeat(Math.max(0, this.width - 4));
+      this.aiSeparator.visible = true;
+      this.aiHeader.content = 'AI: working…';
+      this.aiHeader.visible = true;
+      this.aiHeader.fg = this.theme.textSecondary;
+      this.aiBody.content = '';
+      this.aiBody.visible = false;
+      return;
+    }
+    if (!isCurrent) {
+      this.aiSeparator.visible = false;
+      this.aiHeader.visible = false;
+      this.aiBody.visible = false;
+      return;
+    }
+    if (selectors.aiError) {
+      this.aiSeparator.content = '─'.repeat(Math.max(0, this.width - 4));
+      this.aiSeparator.visible = true;
+      this.aiHeader.content = 'AI error:';
+      this.aiHeader.visible = true;
+      this.aiHeader.fg = this.theme.error;
+      this.aiBody.content = selectors.aiError;
+      this.aiBody.visible = true;
+      this.aiBody.fg = this.theme.error;
+      return;
+    }
+    if (selectors.aiResult) {
+      this.aiSeparator.content = '─'.repeat(Math.max(0, this.width - 4));
+      this.aiSeparator.visible = true;
+      this.aiHeader.content = selectors.aiMode === 'draft' ? 'AI draft reply:' : 'AI summary:';
+      this.aiHeader.visible = true;
+      this.aiHeader.fg = this.theme.textSecondary;
+      this.aiBody.content = selectors.aiResult;
+      this.aiBody.visible = true;
+      this.aiBody.fg = this.theme.textPrimary;
+      return;
+    }
+    this.aiSeparator.visible = false;
+    this.aiHeader.visible = false;
+    this.aiBody.visible = false;
   }
 
   setTheme(theme: Theme): void {
@@ -197,6 +271,8 @@ export class ContentPane extends BoxRenderable {
     this.detailAttachments.fg = theme.textMuted;
     this.detailSeparator.fg = theme.border;
     this.detailBody.fg = theme.textPrimary;
+    this.aiSeparator.fg = theme.border;
+    this.aiBody.fg = theme.textPrimary;
   }
 
   override destroy(): void {
