@@ -280,7 +280,7 @@ export class SearchRepository {
       FROM emails_fts
       JOIN emails AS e ON e.rowid = emails_fts.rowid
       WHERE emails_fts MATCH ?${scopeClause}
-      ORDER BY score ASC
+      ORDER BY score ASC, e.internal_date DESC, e.id ASC
       LIMIT ?
     `;
 
@@ -374,7 +374,7 @@ export class SearchRepository {
         params.push(match);
         // When FTS5 is the entry point, every other condition is an
         // additional `AND e.col = ?` clause.
-        orderBy = 'ORDER BY bm25(emails_fts) ASC';
+        orderBy = 'ORDER BY bm25(emails_fts) ASC, e.internal_date DESC, e.id ASC';
       } else {
         // FTS5 sanitization stripped everything; treat as a pure
         // structured query with no ranking signal.
@@ -423,6 +423,8 @@ export class SearchRepository {
     }
     if (options.hasAttachment === true) {
       where.push('e.has_attachments = 1');
+    } else if (options.hasAttachment === false) {
+      where.push('e.has_attachments = 0');
     }
     if (options.after !== undefined && options.before !== undefined) {
       where.push('e.internal_date BETWEEN ? AND ?');
