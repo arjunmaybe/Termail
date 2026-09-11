@@ -25,8 +25,14 @@ export const uiConfigSchema = z.object({
  * defaulted to 993 (TLS) or 143 (plain) so the runtime always has a usable
  * port without callers re-checking.
  *
+ * SMTP fields (`smtpHost`, `smtpPort`, `smtpMode`) are optional for backward
+ * compatibility and are NEVER inferred from IMAP `useTls`. `smtpPort` /
+ * `smtpMode` are defaulted together (see `resolveSmtpDefaults`); `smtpHost`
+ * stays undefined when absent so sending can fail safely before connecting.
+ *
  * Passwords / OAuth tokens are NEVER stored in the config file. The
- * `ImapService` resolves them from environment variables at connect time.
+ * `ImapService` / `SmtpService` resolve them from environment variables at
+ * connect time.
  */
 export const accountConfigSchema = z
   .object({
@@ -39,14 +45,44 @@ export const accountConfigSchema = z
     username: z.string().min(1).optional(),
     useTls: z.boolean().default(true),
     authType: z.enum(['password', 'oauth2']).default('password'),
+    smtpHost: z.string().min(1).optional(),
+    smtpPort: z.number().int().min(1).max(65535).optional(),
+    smtpMode: z.enum(['implicit-tls', 'starttls']).optional(),
   })
   .transform((account) => {
     // Default the IMAP port based on TLS so callers can rely on a number.
-    if (account.port === undefined) {
-      return { ...account, port: account.useTls ? 993 : 143 };
-    }
-    return account;
+    const withImapPort =
+      account.port === undefined ? { ...account, port: account.useTls ? 993 : 143 } : account;
+    return {
+      ...withImapPort,
+      ...resolveSmtpDefaults({ smtpPort: withImapPort.smtpPort, smtpMode: withImapPort.smtpMode }),
+    };
   });
+
+/**
+ * Resolve SMTP port/mode defaults without reading IMAP `useTls`.
+ *
+ * - no port + no mode -> implicit-tls, 465
+ * - port only -> 465 means implicit-tls, any other port means starttls
+ * - mode only -> implicit-tls uses 465, starttls uses 587
+ * - explicit port always wins over the mode default.
+ */
+export function resolveSmtpDefaults(input: {
+  smtpPort?: number;
+  smtpMode?: 'implicit-tls' | 'starttls';
+}): { smtpPort: number; smtpMode: 'implicit-tls' | 'starttls' } {
+  const { smtpPort, smtpMode } = input;
+  if (smtpPort !== undefined && smtpMode !== undefined) {
+    return { smtpPort, smtpMode };
+  }
+  if (smtpPort !== undefined) {
+    return { smtpPort, smtpMode: smtpPort === 465 ? 'implicit-tls' : 'starttls' };
+  }
+  if (smtpMode !== undefined) {
+    return { smtpPort: smtpMode === 'implicit-tls' ? 465 : 587, smtpMode };
+  }
+  return { smtpPort: 465, smtpMode: 'implicit-tls' };
+}
 
 export const appConfigSchema = z.object({
   version: z.number().int().positive().default(1),
