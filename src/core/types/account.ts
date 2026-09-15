@@ -12,23 +12,17 @@ export interface Account {
   host?: string;
   port?: number;
   username?: string;
-  password?: string;
+  // Credentials are never stored here. Passwords / OAuth tokens are
+  // resolved from environment variables at connect/send time (see
+  // `core/imap/credentials.ts` and `core/ai/credentials.ts`).
   useTls: boolean;
   authType: 'password' | 'oauth2';
-  oauthConfig?: OAuthConfig;
   // SMTP settings (Phase 4, optional, never inferred from IMAP fields).
   smtpHost?: string;
   smtpPort?: number;
   smtpMode?: 'implicit-tls' | 'starttls';
   createdAt: Date;
   updatedAt: Date;
-}
-
-export interface OAuthConfig {
-  clientId: string;
-  clientSecret: string;
-  refreshToken: string;
-  tokenUrl: string;
 }
 
 export interface Folder {

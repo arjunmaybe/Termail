@@ -176,11 +176,11 @@ describe('MessageRepository', () => {
   // -------------------------------------------------------------------------
 
   describe('migration', () => {
-    it('runs v1 then v2 then v3 on a fresh database', () => {
+    it('runs v1 then v2 then v3 then v4 on a fresh database', () => {
       const version = db
         .query('SELECT version FROM schema_version')
         .get() as { version: number };
-      expect(version.version).toBe(3);
+      expect(version.version).toBe(4);
     });
 
     it('adds the new columns on emails', () => {
@@ -268,7 +268,7 @@ describe('MessageRepository', () => {
       expect(true).toBe(true);
     });
 
-    it('preserves pre-existing v1 email rows on a real v1 → v2 → v3 upgrade', async () => {
+    it('preserves pre-existing v1 email rows on a real v1 → v4 upgrade', async () => {
       // Build a brand-new DB that looks exactly like a v1 install,
       // then point a fresh Database at it and run migrations.
       const v1Path = join(
@@ -382,7 +382,7 @@ describe('MessageRepository', () => {
         fresh.close();
 
         // Now open that file with the real Database class and let it
-        // run the v1→v2→v3 migrations.
+        // run the v1→v2→v3→v4 migrations.
         resetDatabase();
         const upgradedPath = v1Path; // reuse the same file
         const v1ConfigPath = join(
@@ -399,7 +399,7 @@ describe('MessageRepository', () => {
         const v = v1Db
           .query('SELECT version FROM schema_version')
           .get() as { version: number };
-        expect(v.version).toBe(3);
+        expect(v.version).toBe(4);
 
         // Legacy row is still here, with uid = NULL.
         const legacy = v1Db
@@ -435,6 +435,127 @@ describe('MessageRepository', () => {
           );
         const c = v1Db.query('SELECT COUNT(*) AS c FROM emails').get() as { c: number };
         expect(c.c).toBe(2);
+
+        resetDatabase();
+        resetConfigStore();
+        if (existsSync(v1ConfigPath)) rmSync(v1ConfigPath);
+      } finally {
+        for (const p of [v1Path, `${v1Path}-wal`, `${v1Path}-shm`]) {
+          if (existsSync(p)) rmSync(p);
+        }
+      }
+    });
+
+    it('v4 converts legacy empty message_id to NULL and allows a second missing ID', async () => {
+      const v1Path = join(tmpdir(), `termail-v1-empty-${Date.now()}-${Math.random()}.sqlite`);
+      const v1ConfigPath = join(tmpdir(), `termail-v1-empty-cfg-${Date.now()}-${Math.random()}.json`);
+      try {
+        const { Database: BunDb } = await import('bun:sqlite');
+        const fresh = new BunDb(v1Path);
+        fresh.exec(`
+          CREATE TABLE accounts (
+            id TEXT PRIMARY KEY, name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('imap', 'local')),
+            email TEXT NOT NULL, host TEXT, port INTEGER, username TEXT, password TEXT,
+            use_tls INTEGER NOT NULL DEFAULT 1,
+            auth_type TEXT NOT NULL DEFAULT 'password' CHECK (auth_type IN ('password', 'oauth2')),
+            oauth_client_id TEXT, oauth_client_secret TEXT,
+            oauth_refresh_token TEXT, oauth_token_url TEXT,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+          );
+          CREATE TABLE folders (
+            id TEXT PRIMARY KEY, account_id TEXT NOT NULL, name TEXT NOT NULL,
+            full_name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('inbox','sent','drafts','archive','trash','spam','starred','important','custom')),
+            parent_id TEXT, delimiter TEXT NOT NULL DEFAULT '/',
+            attributes TEXT NOT NULL DEFAULT '[]',
+            unread_count INTEGER NOT NULL DEFAULT 0,
+            total_count INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+            FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE SET NULL
+          );
+          CREATE TABLE emails (
+            id TEXT PRIMARY KEY, account_id TEXT NOT NULL, folder_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            from_addresses TEXT NOT NULL DEFAULT '[]',
+            to_addresses TEXT NOT NULL DEFAULT '[]',
+            cc_addresses TEXT NOT NULL DEFAULT '[]',
+            subject TEXT NOT NULL DEFAULT '',
+            date INTEGER NOT NULL,
+            is_read INTEGER NOT NULL DEFAULT 0,
+            is_flagged INTEGER NOT NULL DEFAULT 0,
+            has_attachments INTEGER NOT NULL DEFAULT 0,
+            size INTEGER NOT NULL DEFAULT 0,
+            body_text TEXT, body_html TEXT,
+            headers TEXT NOT NULL DEFAULT '{}',
+            attachments TEXT NOT NULL DEFAULT '[]',
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+            FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE,
+            UNIQUE (account_id, folder_id, message_id)
+          );
+          CREATE VIRTUAL TABLE emails_fts USING fts5(
+            message_id UNINDEXED, subject, body_text, from_addresses, to_addresses,
+            content='emails', content_rowid='rowid'
+          );
+          CREATE TRIGGER emails_fts_insert AFTER INSERT ON emails BEGIN
+            INSERT INTO emails_fts (rowid, message_id, subject, body_text, from_addresses, to_addresses)
+            VALUES (new.rowid, new.message_id, new.subject, new.body_text, new.from_addresses, new.to_addresses);
+          END;
+          CREATE TRIGGER emails_fts_delete AFTER DELETE ON emails BEGIN
+            INSERT INTO emails_fts (emails_fts, rowid, message_id, subject, body_text, from_addresses, to_addresses)
+            VALUES ('delete', old.rowid, old.message_id, old.subject, old.body_text, old.from_addresses, old.to_addresses);
+          END;
+          CREATE TRIGGER emails_fts_update AFTER UPDATE ON emails BEGIN
+            INSERT INTO emails_fts (emails_fts, rowid, message_id, subject, body_text, from_addresses, to_addresses)
+            VALUES ('delete', old.rowid, old.message_id, old.subject, old.body_text, old.from_addresses, old.to_addresses);
+            INSERT INTO emails_fts (rowid, message_id, subject, body_text, from_addresses, to_addresses)
+            VALUES (new.rowid, new.message_id, new.subject, new.body_text, new.from_addresses, new.to_addresses);
+          END;
+          CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')));
+        `);
+        fresh
+          .query(`INSERT INTO accounts (id, name, type, email, use_tls, auth_type) VALUES (?, ?, 'imap', ?, 1, 'password')`)
+          .run('work', 'Work', 'me@example.com');
+        fresh
+          .query(`INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, 'INBOX', 'INBOX', 'inbox', '/')`)
+          .run('work:INBOX', 'work');
+        // One legacy row with a missing Message-ID stored as ''.
+        fresh
+          .query(`INSERT INTO emails (id, account_id, folder_id, message_id, subject, date, body_text) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+          .run('legacy-empty', 'work', 'work:INBOX', '', 'Empty Legacy', Math.floor(Date.now() / 1000), 'empty body');
+        fresh.query(`INSERT INTO schema_version (version) VALUES (1)`).run();
+        fresh.close();
+
+        resetDatabase();
+        const store = getConfigStore(v1ConfigPath);
+        await store.initialize();
+        await store.updateConfig({ database: { path: v1Path } } as Partial<AppConfig>);
+        const upgraded = getDatabase(store.getConfig());
+        await upgraded.initialize();
+
+        const v = upgraded.query('SELECT version FROM schema_version').get() as { version: number };
+        expect(v.version).toBe(4);
+        // Legacy '' is now NULL.
+        const raw = upgraded.query('SELECT message_id FROM emails WHERE id = ?').get('legacy-empty') as {
+          message_id: string | null;
+        };
+        expect(raw.message_id).toBeNull();
+        // Folder relationship + FTS survive.
+        const folder = upgraded.query('SELECT id FROM folders WHERE id = ?').get('work:INBOX') as { id: string } | undefined;
+        expect(folder?.id).toBe('work:INBOX');
+        const fts = upgraded.query('SELECT subject FROM emails_fts WHERE emails_fts MATCH ?').all('Empty') as { subject: string }[];
+        expect(fts).toHaveLength(1);
+
+        // A second missing Message-ID now coexists via the repository.
+        const upgradedRepo = new MessageRepository(upgraded);
+        upgradedRepo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 99, messageId: '', subject: 'Second missing' })]);
+        const count = upgraded.query('SELECT COUNT(*) AS c FROM emails').get() as { c: number };
+        expect(count.c).toBe(2);
 
         resetDatabase();
         resetConfigStore();
@@ -577,6 +698,61 @@ describe('MessageRepository', () => {
       const got = repo.findById(`${baseAccount.id}:work:INBOX:7`);
       expect(got).not.toBeNull();
       expect(got!.messageId).toBe('');
+    });
+
+    it('persists two messages with missing Message-IDs in the same folder (v4)', () => {
+      // Authoritative identity is (account_id, folder_id, uid). Two
+      // distinct UIDs with no Message-ID must coexist; the repository
+      // stores NULL so the legacy UNIQUE does not collide.
+      const m1 = makeMessage({ uid: 11, messageId: '', subject: 'No ID one' });
+      const m2 = makeMessage({ uid: 12, messageId: '', subject: 'No ID two' });
+      const r = repo.upsertMessages(baseAccount, inboxFolder, [m1, m2]);
+      expect(r).toEqual({ inserted: 2, updated: 0, highestUid: 12 });
+
+      const got1 = repo.findById(`${baseAccount.id}:work:INBOX:11`);
+      const got2 = repo.findById(`${baseAccount.id}:work:INBOX:12`);
+      expect(got1).not.toBeNull();
+      expect(got2).not.toBeNull();
+      expect(got1!.messageId).toBe('');
+      expect(got2!.messageId).toBe('');
+      // Raw storage is NULL (NULLs never collide in the UNIQUE).
+      const raw = db
+        .query('SELECT message_id FROM emails WHERE id IN (?, ?)')
+        .all(
+          `${baseAccount.id}:work:INBOX:11`,
+          `${baseAccount.id}:work:INBOX:12`
+        ) as { message_id: string | null }[];
+      expect(raw).toHaveLength(2);
+      expect(raw.every((row) => row.message_id === null)).toBe(true);
+
+      // Re-syncing the same UIDs is idempotent (updates, not dupes).
+      const r2 = repo.upsertMessages(baseAccount, inboxFolder, [m1, m2]);
+      expect(r2).toEqual({ inserted: 0, updated: 2, highestUid: 12 });
+      const count = db.query('SELECT COUNT(*) AS c FROM emails').get() as { c: number };
+      expect(count.c).toBe(2);
+
+      // Folder listing + FTS still work for the NULL-ID rows.
+      const listed = repo.listByFolder(baseAccount.id, 'work:INBOX', 10);
+      expect(listed).toHaveLength(2);
+      const bySubject = listed.map((e) => e.subject).sort();
+      expect(bySubject).toEqual(['No ID one', 'No ID two']);
+    });
+
+    it('mixes missing and present Message-IDs without collision (v4)', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [
+        makeMessage({ uid: 21, messageId: '', subject: 'Missing ID' }),
+        makeMessage({ uid: 22, messageId: '<real-22@example.com>', subject: 'Real ID' }),
+      ]);
+      expect(repo.findById(`${baseAccount.id}:work:INBOX:21`)!.messageId).toBe('');
+      expect(repo.findById(`${baseAccount.id}:work:INBOX:22`)!.messageId).toBe(
+        '<real-22@example.com>'
+      );
+      // A second missing ID still coexists alongside the real one.
+      repo.upsertMessages(baseAccount, inboxFolder, [
+        makeMessage({ uid: 23, messageId: '', subject: 'Missing ID 2' }),
+      ]);
+      const count = db.query('SELECT COUNT(*) AS c FROM emails').get() as { c: number };
+      expect(count.c).toBe(3);
     });
 
     it('updates an existing row when re-upserted with a different isRead', () => {

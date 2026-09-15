@@ -26,6 +26,7 @@ import type {
   PersistedFolder,
 } from '../../core/database/index.js';
 import { MessageRepository } from '../../core/database/MessageRepository.js';
+import type { SyncFolder } from '../../core/imap/folders.js';
 import type { ImapService } from '../../core/imap/ImapService.js';
 import { getImapService, resetImapService } from '../../core/imap/ImapService.js';
 import type { AccountConfig } from '../../core/types/config.js';
@@ -152,9 +153,25 @@ export class SyncService {
         persistedFolderIds.add(id);
       }
 
-      // Fetch and persist the messages for the target folder.
-      const result = await imap.syncMessages(imapFolderPath, {});
-      this.repository.upsertMessages(toSafeAccountInput(account), target, result.messages);
+      // Fetch and persist the messages for the target folder. A thrown
+      // fetch/persist error must leave an explicit failure state so the
+      // folder is never mistaken for successfully synced. `markSyncError`
+      // never advances `highest_uid`. The original error is rethrown to
+      // preserve the existing outcome contract (callers map throws to
+      // `network`, e.g. `App.requestSync()`).
+      let result;
+      try {
+        result = await imap.syncMessages(imapFolderPath, {});
+      } catch (error) {
+        this.recordSyncFailure(account, target, error);
+        throw error;
+      }
+      try {
+        this.repository.upsertMessages(toSafeAccountInput(account), target, result.messages);
+      } catch (error) {
+        this.recordSyncFailure(account, target, error);
+        throw error;
+      }
 
       // Build the post-sync folder list straight from the DB so the
       // caller sees exactly what `MessageRepository.listFoldersForAccount`
@@ -186,6 +203,23 @@ export class SyncService {
       }
       // Drop the singleton so the next call gets a clean instance.
       resetImapService();
+    }
+  }
+
+  /**
+   * Record a message-sync failure without advancing `highest_uid`.
+   * Best-effort: a failure to record must never mask the original
+   * sync error. The IMAP layer already redacts secrets before
+   * throwing, so `getErrorMessage` carries no credentials.
+   */
+  private recordSyncFailure(account: AccountConfig, target: SyncFolder, error: unknown): void {
+    try {
+      this.repository.markSyncError(toSafeAccountInput(account), target, getErrorMessage(error));
+    } catch (recordError) {
+      logger.warn('Failed to record sync error state; ignoring', {
+        accountId: account.id,
+        error: getErrorMessage(recordError),
+      });
     }
   }
 }

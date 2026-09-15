@@ -2,25 +2,25 @@
 
 A modern, keyboard-driven terminal email client built with TypeScript, designed with a clean and extensible architecture.
 
-## Features (Phase 1)
+## Features (Phases 1–5)
 
 - **TUI Interface** - Built with `@opentui/core` using its class-based terminal UI API
 - **Reactive State** - Fine-grained reactivity with `@preact/signals`
 - **SQLite Storage** - Local database with FTS5 full-text search (using Bun's built-in `bun:sqlite`)
 - **Configuration** - JSON-based config with Zod validation
 - **TypeScript** - Strict type checking throughout
-- **Testing** - Bun test runner for unit and integration tests
+- **Testing** - Bun test runner for unit and integration tests (`bun test` / `bun run test`)
 - **Linting/Formatting** - Biome for code quality
+- **IMAP synchronization** (imapflow) with SQLite persistence
+- **Email parsing** (mailparser)
+- **SMTP sending** (native `node:net` / `node:tls`, no external SMTP library)
+- **Search and filtering** (FTS5 + structured operators)
+- **AI-assisted summarization and reply drafting** (OpenRouter integration)
 
-## Planned Features (Phase 2+)
+## Planned Features (beyond Phase 5)
 
-- IMAP synchronization (imapflow)
-- SMTP sending (nodemailer)
-- Email parsing (mailparser)
 - Email composition with external editor
-- Search and filtering
 - Multiple account support
-- AI-assisted features (OpenRouter integration)
 
 ## Quick Start
 
@@ -110,7 +110,10 @@ Configuration is stored at `~/.config/termail/config.json`:
 | `↑` / `↓` | Navigate emails |
 | `Enter` | Open email |
 | `Esc` | Back to list |
-| `r` | Sync (Phase 2) |
+| `r` | Sync |
+| `/` | Search |
+| `s` | AI summary |
+| `d` | AI draft reply (into compose, never auto-sends) |
 
 ## License
 

@@ -288,7 +288,7 @@ export class SearchRepository {
       id: string;
       account_id: string;
       folder_id: string;
-      message_id: string;
+      message_id: string | null;
       from_addresses: string;
       to_addresses: string;
       cc_addresses: string;
@@ -328,6 +328,8 @@ export class SearchRepository {
    *   2. `options.text` is empty -> skip FTS5 entirely; query
    *      `emails` directly and order by `internal_date DESC, id ASC`
    *      (a stable order that mirrors `MessageRepository.listByFolder`).
+   *      This path carries no relevance signal, so `score` is `0` for
+   *      every hit; callers must not compare it against BM25 scores.
    *
    * All structured filters contribute one `AND` clause to the `WHERE`.
    * Every value is bound via `?` placeholders; user input is never
@@ -460,7 +462,7 @@ export class SearchRepository {
       id: string;
       account_id: string;
       folder_id: string;
-      message_id: string;
+      message_id: string | null;
       from_addresses: string;
       to_addresses: string;
       cc_addresses: string;
@@ -490,12 +492,13 @@ export class SearchRepository {
   }
 
   /** Convert a `Row` to a `SearchHit`. Centralized so the two
-   * execution paths share the exact same field mapping. */
+   * execution paths share the exact same field mapping. NULL
+   * `message_id` (missing Message-ID, v4+) coerces to `''`. */
   private mapRowToHit(row: {
     id: string;
     account_id: string;
     folder_id: string;
-    message_id: string;
+    message_id: string | null;
     from_addresses: string;
     to_addresses: string;
     cc_addresses: string;
@@ -525,7 +528,7 @@ export class SearchRepository {
         id: row.id,
         accountId: row.account_id,
         folderId: row.folder_id,
-        messageId: row.message_id,
+        messageId: row.message_id ?? '',
         fromAddresses: parseAddresses(row.from_addresses) as never,
         toAddresses: parseAddresses(row.to_addresses) as never,
         ccAddresses: parseAddresses(row.cc_addresses) as never,

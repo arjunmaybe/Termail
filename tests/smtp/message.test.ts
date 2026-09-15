@@ -113,6 +113,20 @@ describe('buildMessage', () => {
     });
     expect(built.raw).not.toContain('Cc:');
   });
+
+  it('generates a UUID-based Message-ID with the sender domain', () => {
+    const built = buildMessage({
+      from: 'me@example.com',
+      to: ['bob@example.com'],
+      subject: 's',
+      body: 'b',
+    });
+    const match = /Message-ID: (<[^>\r\n]+>)\r\n/.exec(built.raw);
+    expect(match).not.toBeNull();
+    expect(match![1]).toMatch(
+      /^<[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@example\.com>$/i
+    );
+  });
 });
 
 describe('buildEnvelopePayload (BCC)', () => {
