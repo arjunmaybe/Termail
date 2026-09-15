@@ -8,13 +8,17 @@
  *     `id = ${accountId}:${folderId}:${uid}`).
  *   - Per-(account, folder) sync state (`folder_sync_state`).
  *
- * Design notes (Phase 2.4 review):
+ * Design notes (Phase 2.4 review, v4 update):
  *   - The application id is derived from the synchronization identity,
  *     not from `message_id`, so an empty `messageId` is still upsertable.
+ *     Missing Message-IDs are stored as NULL (v4 schema makes
+ *     `message_id` nullable); SQLite treats NULLs as distinct in the
+ *     legacy UNIQUE, so multiple missing IDs coexist in one folder.
+ *     Reads coerce NULL back to `''`.
  *   - The `(account_id, folder_id, uid)` unique index is the
  *     synchronization identity. The legacy
  *     `UNIQUE (account_id, folder_id, message_id)` constraint is left
- *     in place as a defense-in-depth index.
+ *     in place as a defense-in-depth index for non-empty Message-IDs.
  *   - `highest_uid` is updated with `MAX(highest_uid, excluded.highest_uid)`
  *     so it never regresses. Partial / error status updates omit the
  *     `highest_uid` column from the `SET` clause entirely.
@@ -494,7 +498,7 @@ export class MessageRepository {
             id,
             account.id,
             folderId,
-            m.messageId,
+            m.messageId.length > 0 ? m.messageId : null,
             serializeAddresses(m.from),
             serializeAddresses(m.to),
             serializeAddresses(m.cc),

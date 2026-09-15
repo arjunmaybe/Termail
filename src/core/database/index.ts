@@ -21,6 +21,7 @@ export {
 } from './schema.js';
 export { MIGRATION_V2_UP_SQL } from './migrations/v2.sql.js';
 export { MIGRATION_V3_UP_SQL } from './migrations/v3.sql.js';
+export { MIGRATION_V4_UP_SQL } from './migrations/v4.sql.js';
 export {
   MessageRepository,
   buildImapSyncLimits,

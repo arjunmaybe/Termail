@@ -264,6 +264,85 @@ describe('SyncService', () => {
     expect(outcome.message).toMatch(/INBOX/);
   });
 
+  it('records an error sync state when message fetch throws, without advancing highest_uid', async () => {
+    fake.syncFolders.mockResolvedValueOnce({
+      folders: [inboxSyncFolder],
+      total: 1,
+      skipped: 0,
+    } satisfies FolderSyncResult);
+    fake.syncMessages.mockRejectedValueOnce(new NetworkError('IMAP connection error: boom'));
+
+    await expect(service.syncAccountFolder(baseAccount, 'INBOX')).rejects.toBeInstanceOf(
+      NetworkError
+    );
+
+    const configStore = getConfigStore(testConfigPath);
+    const repository = new MessageRepository(getDatabase(configStore.getConfig()));
+    const state = repository.getSyncState('work', 'work:INBOX');
+    expect(state).not.toBeNull();
+    expect(state!.lastSyncStatus).toBe('error');
+    expect(state!.lastError).toMatch(/boom/);
+    expect(state!.highestUid).toBe(0);
+    expect(fake.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('records an error sync state when persistence throws and recovers on the next sync', async () => {
+    // First sync succeeds to establish highest_uid = 5.
+    fake.syncFolders.mockResolvedValueOnce({
+      folders: [inboxSyncFolder],
+      total: 1,
+      skipped: 0,
+    } satisfies FolderSyncResult);
+    fake.syncMessages.mockResolvedValueOnce({
+      folder: 'INBOX',
+      total: 1,
+      parsed: 1,
+      deduped: 0,
+      messages: [makeMessage({ uid: 5 })],
+    } satisfies MessageSyncResult);
+    const first = await service.syncAccountFolder(baseAccount, 'INBOX');
+    expect(first.kind).toBe('ok');
+
+    // Second sync fails at the IMAP layer (e.g. mid-fetch). highest_uid
+    // must stay at 5 and no success state may be recorded.
+    fake.syncFolders.mockResolvedValueOnce({
+      folders: [inboxSyncFolder],
+      total: 1,
+      skipped: 0,
+    } satisfies FolderSyncResult);
+    fake.syncMessages.mockRejectedValueOnce(new Error('fetch exploded'));
+    await expect(service.syncAccountFolder(baseAccount, 'INBOX')).rejects.toThrow(
+      'fetch exploded'
+    );
+
+    const configStore = getConfigStore(testConfigPath);
+    const repository = new MessageRepository(getDatabase(configStore.getConfig()));
+    const failed = repository.getSyncState('work', 'work:INBOX');
+    expect(failed).not.toBeNull();
+    expect(failed!.lastSyncStatus).toBe('error');
+    expect(failed!.highestUid).toBe(5);
+
+    // A subsequent successful sync recovers normally.
+    fake.syncFolders.mockResolvedValueOnce({
+      folders: [inboxSyncFolder],
+      total: 1,
+      skipped: 0,
+    } satisfies FolderSyncResult);
+    fake.syncMessages.mockResolvedValueOnce({
+      folder: 'INBOX',
+      total: 1,
+      parsed: 1,
+      deduped: 0,
+      messages: [makeMessage({ uid: 6 })],
+    } satisfies MessageSyncResult);
+    const recovered = await service.syncAccountFolder(baseAccount, 'INBOX');
+    expect(recovered.kind).toBe('ok');
+    const okState = repository.getSyncState('work', 'work:INBOX');
+    expect(okState!.lastSyncStatus).toBe('ok');
+    expect(okState!.highestUid).toBe(6);
+    expect(okState!.lastError).toBeNull();
+  });
+
   // -------------------------------------------------------------------------
   // Defensive inputs
   // -------------------------------------------------------------------------

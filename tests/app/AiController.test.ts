@@ -111,9 +111,52 @@ describe('AiController outcomes', () => {
     expect(outcome.kind).toBe('network');
     expect(selectors.aiResult).toBeNull();
     expect(selectors.aiMode).toBeNull();
-    expect(selectors.aiEmailId).toBeNull();
+    // The error belongs to the requested email so the detail pane can
+    // render it for the correct message.
+    expect(selectors.aiEmailId).toBe('email-1');
     expect(selectors.aiError).toBe('boom');
     expect(selectors.aiLoading).toBe(false);
+  });
+
+  it('claims the pending email and clears stale results while loading', async () => {
+    // Seed a stale result for email-1, then start a request for email-2
+    // that never resolves. While loading, the pending identity must be
+    // email-2 with no stale result visible.
+    const stale = makeEmail({ id: 'email-1' });
+    const next = makeEmail({ id: 'email-2', subject: 'Next' });
+    const service = new AiService({ config: { ...DEFAULT_AI_CONFIG, enabled: true } });
+    vi.spyOn(service, 'summarizeEmail').mockImplementation(() => new Promise<AiOutcome>(() => {}));
+    vi.spyOn(service, 'draftReply').mockImplementation(async () => ({
+      kind: 'network',
+      message: 'unused',
+    }));
+    // Seed stale state as if email-1 had completed.
+    actions.setAiMode('summary');
+    actions.setAiResult('Stale summary.');
+    actions.setAiEmailId(stale.id);
+    const controller = new AiController(service, () => next);
+    const pending = controller.summarizeSelected();
+    // Synchronous portion has run: pending identity claimed, stale cleared.
+    expect(selectors.aiLoading).toBe(true);
+    expect(selectors.aiEmailId).toBe('email-2');
+    expect(selectors.aiResult).toBeNull();
+    expect(selectors.aiMode).toBeNull();
+    expect(selectors.aiError).toBeNull();
+    actions.setAiLoading(false);
+    await Promise.race([pending, Promise.resolve()]);
+  });
+
+  it('does not let a concurrent request steal the pending identity', async () => {
+    const { controller } = makeController(() => new Promise<AiOutcome>(() => {}));
+    const first = controller.summarizeSelected();
+    expect(selectors.aiEmailId).toBe('email-1');
+    const second = await controller.summarizeSelected();
+    expect(second.kind).toBe('network');
+    // Second (rejected) request leaves the first request's identity alone.
+    expect(selectors.aiEmailId).toBe('email-1');
+    expect(selectors.aiLoading).toBe(true);
+    actions.setAiLoading(false);
+    await Promise.race([first, Promise.resolve()]);
   });
 
   it('clearAi resets AI state without touching search/compose', async () => {

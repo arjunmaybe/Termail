@@ -61,8 +61,7 @@ export function dotStuffBody(body: string): string {
 
 function generateMessageId(from: string): string {
   const domain = from.includes('@') ? (from.split('@')[1] ?? 'termail.local') : 'termail.local';
-  const rand = Math.random().toString(36).slice(2, 10);
-  return `<${Date.now()}.${rand}@${domain}>`;
+  return `<${crypto.randomUUID()}@${domain}>`;
 }
 
 export interface BuildMessageInput {

@@ -7,6 +7,7 @@ import { DatabaseError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { MIGRATION_V2_UP_SQL } from './migrations/v2.sql.js';
 import { MIGRATION_V3_UP_SQL } from './migrations/v3.sql.js';
+import { MIGRATION_V4_UP_SQL } from './migrations/v4.sql.js';
 import { CREATE_TABLES_SQL, SCHEMA_VERSION } from './schema.js';
 
 export interface Migration {
@@ -67,6 +68,16 @@ const migrations: Migration[] = [
     // purpose; the `rollbackMigration` runner treats an absent
     // `down` as a STOP (matches the v2 comment on dropping
     // columns referenced by an FTS trigger).
+  },
+  {
+    version: 4,
+    description: 'Allow multiple missing Message-IDs per folder (message_id nullable)',
+    up: (db: Database) => {
+      db.exec(MIGRATION_V4_UP_SQL);
+    },
+    // v4 is forward-only like v3: reverting would require another
+    // full emails-table rebuild. Start from a fresh database to go
+    // back.
   },
 ];
 

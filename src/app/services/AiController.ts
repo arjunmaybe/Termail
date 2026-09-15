@@ -70,8 +70,14 @@ export class AiController {
       return outcome;
     }
 
-    actions.setAiLoading(true);
+    // Claim the pending email up front so the UI never shows a stale
+    // result without a loading indication. Concurrency is still
+    // guarded above: only one request runs at a time.
+    actions.setAiEmailId(email.id);
+    actions.setAiMode(null);
+    actions.setAiResult(null);
     actions.setAiError(null);
+    actions.setAiLoading(true);
     let outcome: AiOutcome;
     try {
       const input = toAiInput(email);
@@ -95,7 +101,7 @@ export class AiController {
     } else {
       actions.setAiMode(null);
       actions.setAiResult(null);
-      actions.setAiEmailId(null);
+      actions.setAiEmailId(email.id);
       actions.setAiError(outcome.message);
     }
     return outcome;

@@ -57,6 +57,7 @@ export class StatusBar extends BoxRenderable {
     this.leftGroup.add(this.kbdHint(ctx, '/', 'Search'));
     this.leftGroup.add(this.kbdHint(ctx, 'r', 'Sync'));
     this.leftGroup.add(this.kbdHint(ctx, 's', 'AI summary'));
+    this.leftGroup.add(this.kbdHint(ctx, 'd', 'AI draft'));
 
     this.folderLabel = new TextRenderable(ctx, {
       id: 'status-folder',
