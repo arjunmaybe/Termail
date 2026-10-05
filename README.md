@@ -148,6 +148,10 @@ account; `smtpPort`/`smtpMode` default to implicit-tls/465.
 
 
 
+## Screenshots
+
+![Termail inbox](docs/termail.png)
+
 ## License
 
 No license file is present in this repository.
