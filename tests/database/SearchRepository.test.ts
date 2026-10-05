@@ -137,11 +137,12 @@ describe('buildMatchQuery', () => {
 
   it('strips FTS5 operator characters', () => {
     // Operator characters become spaces and any resulting empty
-    // tokens are dropped. The dash is preserved because unicode61
-    // treats it as a token-internal character; see the dedicated
-    // "keeps the dash" test below.
-    expect(buildMatchQuery('alpha + beta - gamma')).toBe('alpha beta - gamma');
-    expect(buildMatchQuery('(alpha) OR beta')).toBe('alpha OR beta');
+    // tokens are dropped. Interior dashes are preserved because
+    // unicode61 treats them as token-internal; see the dedicated
+    // "keeps the dash" test below. B10 drops standalone OR/AND/NOT/
+    // NEAR and leading `-` so raw input stays implicit-AND-only.
+    expect(buildMatchQuery('alpha + beta - gamma')).toBe('alpha beta gamma');
+    expect(buildMatchQuery('(alpha) OR beta')).toBe('alpha beta');
     expect(buildMatchQuery('alpha:beta')).toBe('alpha beta');
     expect(buildMatchQuery('"quoted"')).toBe('quoted');
     expect(buildMatchQuery('a*b')).toBe('a b');

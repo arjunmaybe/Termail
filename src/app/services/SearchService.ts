@@ -197,10 +197,15 @@ export class SearchService {
       structured.hasAttachment = true;
     }
     if (parsed.after !== undefined) {
+      // B9 — `after:` remains inclusive at start of day (UTC midnight).
       structured.after = isoDateToEpochSeconds(parsed.after);
     }
     if (parsed.before !== undefined) {
-      structured.before = isoDateToEpochSeconds(parsed.before);
+      // B9 — `before:` must cover the complete calendar day (through
+      // 23:59:59 UTC). Repository operators stay unchanged (inclusive
+      // `<=` / `BETWEEN`); the service expands to end-of-day so
+      // same-day `after:X before:X` represents the whole day.
+      structured.before = isoDateToEndOfDayEpochSeconds(parsed.before);
     }
 
     // Short-circuit: if there's nothing to ask the repository,
@@ -245,4 +250,14 @@ export function isoDateToEpochSeconds(iso: string): number {
   const mm = m ?? 1;
   const dd = d ?? 1;
   return Math.floor(Date.UTC(yy, mm - 1, dd) / 1000);
+}
+
+/**
+ * B9 — convert a `YYYY-MM-DD` string to epoch seconds for the end of
+ * that calendar day (23:59:59 UTC). Used for `before:` so the complete
+ * day is covered while repository comparison operators stay unchanged.
+ * Pure function exported for unit tests.
+ */
+export function isoDateToEndOfDayEpochSeconds(iso: string): number {
+  return isoDateToEpochSeconds(iso) + 86399;
 }

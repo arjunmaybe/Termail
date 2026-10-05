@@ -77,10 +77,10 @@ export interface FolderSyncState {
  * IMAP-side operation from a `PersistedFolder` MUST read `fullName`, never
  * `id` (the id is `${accountId}:${path}` and is local to the database).
  *
- * `unreadCount` and `totalCount` reflect the stored DB columns, which
- * Phase 2.4 does NOT currently update. Phase 2.5 displays folder counts
- * derived from the loaded email list instead; these fields stay at `0`
- * until a future milestone adds a counts-computation write path.
+ * B6 — `unreadCount` and `totalCount` are derived at read time from the
+ * persisted `emails` table (`GROUP BY folder_id` for the account). No
+ * migration, no schema change; the `folders.unread_count` /
+ * `folders.total_count` columns are ignored for display.
  */
 export interface PersistedFolder {
   id: string;
@@ -641,24 +641,61 @@ export class MessageRepository {
   }
 
   /**
+   * Per-folder message counts derived from persisted emails.
+   * Source of truth is the `emails` table; no migration, no schema change.
+   */
+  getFolderCounts(accountId: string): Array<{ folderId: string; total: number; unread: number }> {
+    const rows = this.database
+      .query(
+        `SELECT folder_id, COUNT(*) AS total,
+                SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread
+           FROM emails
+          WHERE account_id = ?
+          GROUP BY folder_id`
+      )
+      .all(accountId) as Array<{ folder_id: string; total: number; unread: number | null }>;
+    return rows.map((r) => ({
+      folderId: r.folder_id,
+      total: typeof r.total === 'number' ? r.total : 0,
+      unread: typeof r.unread === 'number' ? r.unread : 0,
+    }));
+  }
+
+  /**
    * List all folders belonging to an account, ordered to match the
    * deterministic Phase 2.2 ordering: special-use types first
    * (inbox, sent, drafts, archive, spam, trash, starred, important)
    * then `custom` folders by `name` ascending. Within a type group
    * the secondary sort is by `name` ascending.
    *
+   * B6 — `unreadCount` / `totalCount` are derived at read time from
+   * persisted emails (`GROUP BY folder_id` for the account). Read-only.
+   * Does not write or update any DB column. Scoped by `account_id` in
+   * both the outer query and the counts subquery so no cross-account
+   * leakage is possible.
+   *
    * Read-only. Does not write or update any DB column.
    */
   listFoldersForAccount(accountId: string): PersistedFolder[] {
     const rows = this.database
       .query(
-        `SELECT id, account_id, name, full_name, type, parent_id,
-                delimiter, attributes, unread_count, total_count,
-                created_at, updated_at
-           FROM folders
-          WHERE account_id = ?
+        `SELECT f.id, f.account_id, f.name, f.full_name, f.type, f.parent_id,
+                f.delimiter, f.attributes,
+                COALESCE(c.total_count, 0) AS total_count,
+                COALESCE(c.unread_count, 0) AS unread_count,
+                f.created_at, f.updated_at
+           FROM folders AS f
+           LEFT JOIN (
+             SELECT folder_id,
+                    COUNT(*) AS total_count,
+                    SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread_count
+               FROM emails
+              WHERE account_id = ?
+              GROUP BY folder_id
+           ) AS c ON c.folder_id = f.id
+          WHERE f.account_id = ?
           ORDER BY
-            CASE type
+            CASE f.type
               WHEN 'inbox'     THEN 0
               WHEN 'sent'      THEN 1
               WHEN 'drafts'    THEN 2
@@ -669,9 +706,9 @@ export class MessageRepository {
               WHEN 'important' THEN 7
               ELSE 8
             END,
-            name ASC`
+            f.name ASC`
       )
-      .all(accountId) as Record<string, unknown>[];
+      .all(accountId, accountId) as Record<string, unknown>[];
     return rows.map(rowToFolder);
   }
 }

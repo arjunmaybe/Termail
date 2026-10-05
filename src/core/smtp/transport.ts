@@ -358,15 +358,24 @@ export class NodeSmtpTransport {
   }
 
   async send(envelope: SmtpEnvelope): Promise<void> {
+    // B12 — trim envelope addresses so MAIL FROM / RCPT TO never carry
+    // raw padding. Validation/building already trims for headers; the
+    // transport must use the same trimmed values on the wire. BCC stays
+    // envelope-only (never in DATA headers); TLS/AUTH/error redaction
+    // behavior is unchanged.
+    const from = envelope.from.trim();
+    const to = envelope.to.map((a) => a.trim());
+    const cc = envelope.cc.map((a) => a.trim());
+    const bcc = envelope.bcc.map((a) => a.trim());
     const built = buildEnvelopePayload({
-      from: envelope.from,
-      to: envelope.to,
-      cc: envelope.cc,
-      bcc: envelope.bcc,
+      from,
+      to,
+      cc,
+      bcc,
       subject: envelope.subject,
       body: envelope.body,
     });
-    const recipients = [...envelope.to, ...envelope.cc, ...envelope.bcc];
+    const recipients = [...to, ...cc, ...bcc];
 
     let session: Session | null = null;
     try {
@@ -377,7 +386,7 @@ export class NodeSmtpTransport {
           this.timeouts.connectionTimeoutMs
         );
         session = { socket, buffer: '', closed: false, secret: this.secret };
-        await this.runTlsSession(session, built.raw, envelope.from, recipients);
+        await this.runTlsSession(session, built.raw, from, recipients);
       } else {
         const plain = await this.hooks.connectTcp(
           this.host,
@@ -408,7 +417,7 @@ export class NodeSmtpTransport {
           throw error;
         }
         session = { socket: upgraded, buffer: '', closed: false, secret: this.secret };
-        await this.runTlsSession(session, built.raw, envelope.from, recipients);
+        await this.runTlsSession(session, built.raw, from, recipients);
       }
       logger.info('SMTP message sent', {
         host: this.host,

@@ -67,68 +67,83 @@ export class OpenRouterTransport implements AiProvider {
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
+  /**
+   * B13 — the configured timeout covers the complete request lifecycle:
+   * fetch, status handling, response body consumption, and parsing. The
+   * abort timer stays armed until the body has been fully consumed, so a
+   * stalled `text()` / `json()` read still rejects with timeout semantics.
+   * Only native `fetch` + `AbortController` + the injectable `fetchFn`.
+   */
   async complete(request: AiCompletionRequest): Promise<string> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    let response: Response;
     try {
-      response = await this.fetchFn(this.endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: this.model,
-          messages: [
-            { role: 'system', content: request.system },
-            { role: 'user', content: request.user },
-          ],
-        }),
-        signal: controller.signal,
-      });
-    } catch (error) {
-      if (controller.signal.aborted) {
-        throw new NetworkError(`AI request timed out after ${this.timeoutMs}ms`);
+      let response: Response;
+      try {
+        response = await this.fetchFn(this.endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: [
+              { role: 'system', content: request.system },
+              { role: 'user', content: request.user },
+            ],
+          }),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          throw new NetworkError(`AI request timed out after ${this.timeoutMs}ms`);
+        }
+        throw new NetworkError(
+          `AI request failed: ${redactKey(getErrorMessage(error), this.apiKey)}`
+        );
       }
-      throw new NetworkError(
-        `AI request failed: ${redactKey(getErrorMessage(error), this.apiKey)}`
-      );
+
+      if (response.status === 401 || response.status === 403) {
+        throw new AuthenticationError(
+          'AI authentication failed: the provider rejected the API key. ' +
+            'Check the TERMAIL_AI_API_KEY environment variable.'
+        );
+      }
+      if (response.status === 429) {
+        throw new NetworkError('AI request was rate-limited (429). Try again later.');
+      }
+      if (!response.ok) {
+        let preview = '';
+        try {
+          preview = (await response.text()).slice(0, 300);
+        } catch (error) {
+          if (controller.signal.aborted) {
+            throw new NetworkError(`AI request timed out after ${this.timeoutMs}ms`);
+          }
+          preview = '';
+        }
+        throw new NetworkError(
+          `AI request failed with status ${response.status}` +
+            (preview ? `: ${redactKey(preview, this.apiKey)}` : '')
+        );
+      }
+
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch (error) {
+        if (controller.signal.aborted) {
+          throw new NetworkError(`AI request timed out after ${this.timeoutMs}ms`);
+        }
+        throw new NetworkError(
+          `AI provider returned invalid JSON: ${redactKey(getErrorMessage(error), this.apiKey)}`
+        );
+      }
+      return parseCompletionBody(body);
     } finally {
       clearTimeout(timer);
     }
-
-    if (response.status === 401 || response.status === 403) {
-      throw new AuthenticationError(
-        'AI authentication failed: the provider rejected the API key. ' +
-          'Check the TERMAIL_AI_API_KEY environment variable.'
-      );
-    }
-    if (response.status === 429) {
-      throw new NetworkError('AI request was rate-limited (429). Try again later.');
-    }
-    if (!response.ok) {
-      let preview = '';
-      try {
-        preview = (await response.text()).slice(0, 300);
-      } catch {
-        preview = '';
-      }
-      throw new NetworkError(
-        `AI request failed with status ${response.status}` +
-          (preview ? `: ${redactKey(preview, this.apiKey)}` : '')
-      );
-    }
-
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch (error) {
-      throw new NetworkError(
-        `AI provider returned invalid JSON: ${redactKey(getErrorMessage(error), this.apiKey)}`
-      );
-    }
-    return parseCompletionBody(body);
   }
 }
 

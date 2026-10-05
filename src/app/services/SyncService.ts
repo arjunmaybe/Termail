@@ -25,7 +25,11 @@ import type {
   PersistedEmail,
   PersistedFolder,
 } from '../../core/database/index.js';
-import { MessageRepository } from '../../core/database/MessageRepository.js';
+import {
+  buildImapSyncLimits,
+  deriveFolderId,
+  MessageRepository,
+} from '../../core/database/MessageRepository.js';
 import type { SyncFolder } from '../../core/imap/folders.js';
 import type { ImapService } from '../../core/imap/ImapService.js';
 import { getImapService, resetImapService } from '../../core/imap/ImapService.js';
@@ -158,10 +162,23 @@ export class SyncService {
       // folder is never mistaken for successfully synced. `markSyncError`
       // never advances `highest_uid`. The original error is rethrown to
       // preserve the existing outcome contract (callers map throws to
-      // `network`, e.g. `App.requestSync()`).
+      // `network`/`auth`, e.g. `App.requestSync()`).
+      //
+      // Incremental sync: the checkpoint `(account, folder)` -> highest UID
+      // is read before fetching so only UIDs strictly greater are requested
+      // (`sinceUid` is exclusive per `buildFetchRange`). A missing checkpoint
+      // means a full sync. `MAX()` in the repository guarantees the
+      // checkpoint never regresses, so a stale or empty batch cannot move
+      // it backwards.
       let result;
       try {
-        result = await imap.syncMessages(imapFolderPath, {});
+        const folderId = deriveFolderId(account.id, target.path);
+        const checkpoint = this.repository.getSyncState(account.id, folderId);
+        const limits = buildImapSyncLimits(checkpoint);
+        result = await imap.syncMessages(
+          imapFolderPath,
+          limits ? { limits } : {}
+        );
       } catch (error) {
         this.recordSyncFailure(account, target, error);
         throw error;

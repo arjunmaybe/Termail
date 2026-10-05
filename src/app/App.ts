@@ -10,6 +10,7 @@ import type { PersistedEmail, PersistedFolder } from '../core/database/index.js'
 import { actions, selectors, subscribe } from '../core/state/AppState.js';
 import type { AccountConfig } from '../core/types/config.js';
 import type { Account, Folder } from '../core/types/index.js';
+import { AuthenticationError } from '../core/utils/errors.js';
 import { logger } from '../core/utils/logger.js';
 import { SearchInputBar } from './components/SearchInputBar.js';
 import { ContentPane } from './layout/ContentPane.js';
@@ -51,7 +52,13 @@ export class App extends BoxRenderable {
   private composeController: ComposeController | null = null;
   private aiService: AiService | null = null;
   private aiController: AiController | null = null;
-  private syncInFlight: Set<string> = new Set();
+  /**
+   * B5 — global single-flight guard. Only one manual synchronization
+   * may be active at a time because the IMAP service is account-scoped
+   * and reset between operations. Per-folder keys would allow
+   * conflicting concurrent syncs.
+   */
+  private syncInFlight = false;
   private lastLoadedFolderId: string | null = null;
 
   constructor(ctx: RenderContext, options: AppOptions & { id?: string } = {}) {
@@ -232,8 +239,12 @@ export class App extends BoxRenderable {
 
   /**
    * Trigger a sync of the current account/folder. No-op if either is
-   * missing or if a sync for the same target is already in flight.
+   * missing or if any sync is already in flight (global single-flight).
    * Maps the `SyncOutcome` to AppState actions.
+   *
+   * B5 — captures account/folder before awaiting and only applies
+   * folder-specific UI data when still relevant, so a stale completion
+   * after a folder switch never overwrites the newly selected folder.
    */
   async requestSync(): Promise<void> {
     if (!this.initialized || !this.syncService) {
@@ -255,18 +266,22 @@ export class App extends BoxRenderable {
       actions.setSyncError('Folder not found in current account');
       return;
     }
-    const key = `${accountId}:${folderId}`;
-    if (this.syncInFlight.has(key)) return;
-    this.syncInFlight.add(key);
+    // Global single-flight: only one manual sync at a time.
+    if (this.syncInFlight) return;
+    this.syncInFlight = true;
 
     const accounts = selectors.accounts;
     const account = accounts.find((a) => a.id === accountId);
     if (!account) {
-      this.syncInFlight.delete(key);
+      this.syncInFlight = false;
       actions.setSyncError('Account not found in state');
       return;
     }
     const accountConfig = toAccountConfig(account);
+
+    // Capture the request target before awaiting for stale-result checks.
+    const requestAccountId = accountId;
+    const requestFolderId = folderId;
 
     actions.setLoadingFolders(true);
     actions.setLoadingEmails(true);
@@ -276,22 +291,35 @@ export class App extends BoxRenderable {
     try {
       outcome = await this.syncService.syncAccountFolder(accountConfig, folder.fullName);
     } catch (error) {
-      outcome = {
-        kind: 'network',
-        message: error instanceof Error ? error.message : String(error),
-      };
-    } finally {
-      this.syncInFlight.delete(key);
-      actions.setLoadingFolders(false);
-      actions.setLoadingEmails(false);
+      // Preserve auth vs network: a mid-sync AuthenticationError (e.g. token
+      // expiry during fetch, or a DB-wrapped auth failure) must surface as
+      // `auth`, not as a generic network error. Anything else stays `network`.
+      const message = error instanceof Error ? error.message : String(error);
+      outcome =
+        error instanceof AuthenticationError
+          ? { kind: 'auth', message }
+          : { kind: 'network', message };
     }
+
+    const accountStillRelevant = selectors.currentAccountId === requestAccountId;
+    const stillRelevant =
+      accountStillRelevant && selectors.currentFolderId === requestFolderId;
 
     switch (outcome.kind) {
       case 'ok': {
-        const folders: Folder[] = outcome.folders.map(toFolderProjection);
-        const messages: PersistedEmail[] = outcome.messages;
-        actions.setFolders(folders);
-        actions.setEmails(messages);
+        // Folders are account-scoped: apply when the account is still
+        // selected. Messages are folder-specific: apply only when the
+        // originally requested folder is still selected. Success status
+        // is global (sync did succeed), so always report it to avoid a
+        // stuck "syncing" indicator after a folder/account switch.
+        if (accountStillRelevant) {
+          const folders: Folder[] = outcome.folders.map(toFolderProjection);
+          actions.setFolders(folders);
+        }
+        if (stillRelevant) {
+          const messages: PersistedEmail[] = outcome.messages;
+          actions.setEmails(messages);
+        }
         actions.setSyncStatus('success');
         break;
       }
@@ -307,6 +335,81 @@ export class App extends BoxRenderable {
       case 'no-folder':
         actions.setSyncError(outcome.message);
         break;
+    }
+
+    this.syncInFlight = false;
+    actions.setLoadingFolders(false);
+    actions.setLoadingEmails(false);
+  }
+
+  // -----------------------------------------------------------------
+  // Keyboard-first navigation. Pure state transitions over the current
+  // visible list (search hits when a search is active, else folder emails).
+  // No I/O, no IMAP, no DB writes. Folder moves go through
+  // `actions.setCurrentFolder`, so the existing `attach()` subscription
+  // reloads emails for the newly selected folder.
+  // -----------------------------------------------------------------
+
+  /**
+   * Move the email selection by `delta` (+1 next, -1 previous).
+   * Clamped: staying at the ends is a no-op, never wraps. When nothing
+   * is selected, +1 selects the first row and -1 selects the last row.
+   * No-op when the visible list is empty.
+   */
+  moveEmailSelection(delta: 1 | -1): void {
+    const visible = selectors.searchActive
+      ? (selectors.searchHits ?? [])
+      : selectors.emails;
+    if (visible.length === 0) return;
+    const currentId = selectors.selectedEmailId;
+    if (!currentId) {
+      const target = delta > 0 ? visible[0] : visible[visible.length - 1];
+      if (target) actions.setSelectedEmail(target.id);
+      return;
+    }
+    const idx = visible.findIndex((e) => e.id === currentId);
+    if (idx === -1) {
+      const target = delta > 0 ? visible[0] : visible[visible.length - 1];
+      if (target) actions.setSelectedEmail(target.id);
+      return;
+    }
+    const next = idx + delta;
+    if (next < 0 || next >= visible.length) return;
+    const target = visible[next];
+    if (target) actions.setSelectedEmail(target.id);
+  }
+
+  /**
+   * Move the folder selection by `delta` (+1 next, -1 previous).
+   * Clamped, never wraps. Clears the email selection via
+   * `actions.setCurrentFolder` so the detail view never shows a stale
+   * message from the previous folder.
+   */
+  moveFolderSelection(delta: 1 | -1): void {
+    const folders = selectors.folders;
+    if (folders.length === 0) return;
+    const currentId = selectors.currentFolderId;
+    if (!currentId) {
+      const first = folders[0];
+      if (first) actions.setCurrentFolder(first.id);
+      return;
+    }
+    const idx = folders.findIndex((f) => f.id === currentId);
+    if (idx === -1) {
+      const first = folders[0];
+      if (first) actions.setCurrentFolder(first.id);
+      return;
+    }
+    const next = idx + delta;
+    if (next < 0 || next >= folders.length) return;
+    const target = folders[next];
+    if (target) actions.setCurrentFolder(target.id);
+  }
+
+  /** Clear the email selection and return to the list view. */
+  clearEmailSelection(): void {
+    if (selectors.selectedEmailId !== null) {
+      actions.setSelectedEmail(null);
     }
   }
 
@@ -442,8 +545,16 @@ export class App extends BoxRenderable {
     return this.aiController?.isLoading() ?? false;
   }
 
-  /** Summarize the currently selected email into the detail pane. */
+  /**
+   * Summarize the currently selected email into the detail pane.
+   *
+   * B2 guard: never start summarization while compose is active. The
+   * existing compose buffer must remain unchanged and AI state must
+   * remain unaffected, so this returns early without calling the
+   * controller when compose is active. No confirmation dialog.
+   */
   async summarizeSelectedEmail(): Promise<void> {
+    if (this.isComposeActive()) return;
     await this.aiController?.summarizeSelected();
   }
 
@@ -451,10 +562,18 @@ export class App extends BoxRenderable {
    * Draft a reply to the currently selected email. On success the draft
    * is loaded into compose (To = original sender, Subject = Re: …) for
    * user review/editing. Never sends.
+   *
+   * B2 guard: if compose is already active, AI draft generation must
+   * not destroy it. Returns early without calling the AI controller so
+   * the buffer remains unchanged. After awaiting AI, re-checks compose
+   * so a buffer opened while AI was in flight is never clobbered.
+   * `openCompose()` semantics are unchanged globally.
    */
   async draftReplyWithAi(): Promise<void> {
+    if (this.isComposeActive()) return;
     const outcome = await this.aiController?.draftReplySelected();
     if (!outcome || outcome.kind !== 'ok') return;
+    if (this.isComposeActive()) return;
     const email = getSelectedEmail();
     if (!email) return;
     const sender = email.fromAddresses[0]?.address;

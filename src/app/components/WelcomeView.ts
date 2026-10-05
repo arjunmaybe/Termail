@@ -48,7 +48,7 @@ export class WelcomeView extends BoxRenderable {
     });
     this.hint = new TextRenderable(ctx, {
       id: 'welcome-hint',
-      content: "Press 'r' to sync",
+      content: 'j/k move   h/l folders   r sync   / search   q quit',
       fg: theme.textMuted,
     });
 
