@@ -53,7 +53,7 @@ export class App extends BoxRenderable {
   private aiService: AiService | null = null;
   private aiController: AiController | null = null;
   /**
-   * B5 — global single-flight guard. Only one manual synchronization
+   * Global single-flight guard. Only one manual synchronization
    * may be active at a time because the IMAP service is account-scoped
    * and reset between operations. Per-folder keys would allow
    * conflicting concurrent syncs.
@@ -242,7 +242,7 @@ export class App extends BoxRenderable {
    * missing or if any sync is already in flight (global single-flight).
    * Maps the `SyncOutcome` to AppState actions.
    *
-   * B5 — captures account/folder before awaiting and only applies
+   * Captures account/folder before awaiting and only applies
    * folder-specific UI data when still relevant, so a stale completion
    * after a folder switch never overwrites the newly selected folder.
    */
@@ -645,7 +645,7 @@ export class App extends BoxRenderable {
   /**
    * Summarize the currently selected email into the detail pane.
    *
-   * B2 guard: never start summarization while compose is active. The
+   * Guard: never start summarization while compose is active. The
    * existing compose buffer must remain unchanged and AI state must
    * remain unaffected, so this returns early without calling the
    * controller when compose is active. No confirmation dialog.
@@ -660,7 +660,7 @@ export class App extends BoxRenderable {
    * is loaded into compose (To = original sender, Subject = Re: …) for
    * user review/editing. Never sends.
    *
-   * B2 guard: if compose is already active, AI draft generation must
+   * Guard: if compose is already active, AI draft generation must
    * not destroy it. Returns early without calling the AI controller so
    * the buffer remains unchanged. After awaiting AI, re-checks compose
    * so a buffer opened while AI was in flight is never clobbered.

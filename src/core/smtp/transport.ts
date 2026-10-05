@@ -358,7 +358,7 @@ export class NodeSmtpTransport {
   }
 
   async send(envelope: SmtpEnvelope): Promise<void> {
-    // B12 — trim envelope addresses so MAIL FROM / RCPT TO never carry
+    // Trim envelope addresses so MAIL FROM / RCPT TO never carry
     // raw padding. Validation/building already trims for headers; the
     // transport must use the same trimmed values on the wire. BCC stays
     // envelope-only (never in DATA headers); TLS/AUTH/error redaction

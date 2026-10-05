@@ -163,7 +163,7 @@ const flaggedCount = computed(() => {
 });
 
 /**
- * B6 — per-folder unread counts combining persisted (DB-derived)
+ * Per-folder unread counts combining persisted (DB-derived)
  * `folder.unreadCount` with live in-memory counts.
  *
  * `folder.unreadCount` (populated via `MessageRepository`
@@ -192,7 +192,7 @@ const foldersWithUnread = computed(() => {
 });
 
 /**
- * B6 — keep the stored folder `unreadCount` live when the in-memory
+ * Keep the stored folder `unreadCount` live when the in-memory
  * read state changes. Floors at `0`; increments are unbounded. Used by
  * `markAsRead` / `markAsUnread` / `updateEmail` / `removeEmail` so the
  * `foldersWithUnread` `max()` never goes stale.

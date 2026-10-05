@@ -68,7 +68,7 @@ export class OpenRouterTransport implements AiProvider {
   }
 
   /**
-   * B13 — the configured timeout covers the complete request lifecycle:
+   * The configured timeout covers the complete request lifecycle:
    * fetch, status handling, response body consumption, and parsing. The
    * abort timer stays armed until the body has been fully consumed, so a
    * stalled `text()` / `json()` read still rejects with timeout semantics.

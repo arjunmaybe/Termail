@@ -128,7 +128,7 @@ export class StatusBar extends BoxRenderable {
       this.syncLabel.content = '● Syncing';
       this.syncLabel.fg = this.theme.warning;
     } else if (status === 'error') {
-      // B1 — surface the actual sanitized sync error (first line,
+      // Surface the actual sanitized sync error (first line,
       // length-limited) instead of a generic indicator.
       this.syncLabel.content = formatSyncError(selectors.syncError);
       this.syncLabel.fg = this.theme.error;
@@ -159,7 +159,7 @@ export class StatusBar extends BoxRenderable {
 }
 
 /**
- * B1 — format a sync error for the status bar. Shows the first line of
+ * Format a sync error for the status bar. Shows the first line of
  * the sanitized error, length-limited, with a generic fallback when no
  * message exists. No new panel; existing status UI only.
  */

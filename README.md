@@ -1,21 +1,19 @@
 # Termail
 
-A modern, keyboard-driven terminal email client built with TypeScript, designed with a clean and extensible architecture.
+A terminal email client built with Bun, TypeScript, and OpenTUI.
 
-## Features (Phases 1–5)
+Termail syncs mail over IMAP, stores messages locally in SQLite, sends mail
+over SMTP, and provides keyboard-first navigation and FTS5 search.
 
-- **TUI Interface** - Built with `@opentui/core` using its class-based terminal UI API
-- **Reactive State** - Fine-grained reactivity with `@preact/signals`
-- **SQLite Storage** - Local database with FTS5 full-text search (using Bun's built-in `bun:sqlite`)
-- **Configuration** - JSON-based config with Zod validation
-- **TypeScript** - Strict type checking throughout
-- **Testing** - Bun test runner for unit and integration tests (`bun test --parallel=1` deterministic gate / `bun run test`); Vitest runner available for the Node-compatible subset via `bun run test:vitest`
-- **Linting/Formatting** - Biome for code quality
-- **IMAP synchronization** (imapflow) with SQLite persistence
-- **Email parsing** (mailparser)
-- **SMTP sending** (native `node:net` / `node:tls`, no external SMTP library)
-- **Search and filtering** (FTS5 + structured operators)
-- **AI-assisted summarization and reply drafting** (OpenRouter integration)
+## Features
+
+- IMAP sync (imapflow) with local SQLite persistence and per-folder checkpoints
+- Fresh-account bootstrap: folder discovery, INBOX preferred, then message sync
+- Full-text search (FTS5) with structured operators (`from:`, `subject:`, `is:`, dates)
+- SMTP sending over implicit TLS / STARTTLS (password auth, no external SMTP library)
+- Keyboard-first TUI (`j/k` mail, `h/l` folders, `/` search, `r` sync, `q` quit)
+- Optional AI summarization and reply drafting via OpenRouter (off by default, never auto-sends)
+- JSON config with Zod validation; strict TypeScript; Biome lint/format
 
 ## Limitations
 
@@ -33,7 +31,7 @@ A modern, keyboard-driven terminal email client built with TypeScript, designed 
 
 - [Bun](https://bun.sh/) v1.1+
 
-### Installation process for the viewer :
+### Install
 
 ```bash
 # Clone and install
@@ -90,7 +88,7 @@ termail/
 │   │   ├── ai/                 # AI assistance (service, prompts, transport)
 │   │   └── utils/              # Utilities (logger, errors)
 │   ├── app/services/           # SyncService, SearchService/Controller, Compose/AiController
-│   └── test/                   # Test setup
+│   └── test/                   # Test setup (Bun sqlite, OpenTUI harness)
 ├── tests/                      # Test files
 ├── package.json
 ├── tsconfig.json
@@ -148,6 +146,8 @@ account; `smtpPort`/`smtpMode` default to implicit-tls/465.
 | `s` | AI summary |
 | `d` | AI draft reply (into compose, never auto-sends) |
 
+
+
 ## License
 
-License not yet specified.
+No license file is present in this repository.

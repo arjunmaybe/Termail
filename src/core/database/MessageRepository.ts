@@ -77,7 +77,7 @@ export interface FolderSyncState {
  * IMAP-side operation from a `PersistedFolder` MUST read `fullName`, never
  * `id` (the id is `${accountId}:${path}` and is local to the database).
  *
- * B6 — `unreadCount` and `totalCount` are derived at read time from the
+ * `unreadCount` and `totalCount` are derived at read time from the
  * persisted `emails` table (`GROUP BY folder_id` for the account). No
  * migration, no schema change; the `folders.unread_count` /
  * `folders.total_count` columns are ignored for display.
@@ -668,7 +668,7 @@ export class MessageRepository {
    * then `custom` folders by `name` ascending. Within a type group
    * the secondary sort is by `name` ascending.
    *
-   * B6 — `unreadCount` / `totalCount` are derived at read time from
+   * `unreadCount` / `totalCount` are derived at read time from
    * persisted emails (`GROUP BY folder_id` for the account). Read-only.
    * Does not write or update any DB column. Scoped by `account_id` in
    * both the outer query and the counts subquery so no cross-account
