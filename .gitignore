@@ -32,3 +32,6 @@ coverage/
 
 # Config (local overrides)
 config.local.json
+
+# Local-only agent configuration (not required for contributors)
+.claude/settings.local.json

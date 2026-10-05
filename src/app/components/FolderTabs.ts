@@ -78,7 +78,7 @@ export class FolderTabs extends BoxRenderable {
 
     for (const folder of folders) {
       const isActive = folder.id === currentFolderId;
-      // B6 — `folder.unreadCount` is populated at read time from
+      // `folder.unreadCount` is populated at read time from
       // persisted emails (`MessageRepository` GROUP BY folder_id), so it
       // is correct for non-current and large folders. `foldersWithUnread`
       // combines that DB truth with live in-memory counts for immediate
