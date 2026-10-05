@@ -397,9 +397,16 @@ function normalizeMailbox(entry: {
     specialUse = entry.specialUse.replace(/^\\/, '').toLowerCase();
   }
 
-  // Derive a human-readable name from the last path segment. For "INBOX"
-  // we keep it as-is; for "Foo/Bar" we get "Bar".
-  const segments = entry.path.split(/[./]/).filter((s) => s.length > 0);
+  // Derive a human-readable name from the last path segment using only
+  // the actual server-supplied delimiter. Splitting on hardcoded `/` or
+  // `.` corrupts names containing the other character (e.g. `/`
+  // delimiter with `.` inside a folder name). Empty/missing delimiters
+  // mean the path is a single top-level name.
+  const delimiter = entry.delimiter ?? '';
+  const segments =
+    delimiter.length > 0
+      ? entry.path.split(delimiter).filter((s) => s.length > 0)
+      : [entry.path];
   const last = segments[segments.length - 1];
   const name = last ?? entry.path;
 

@@ -157,17 +157,21 @@ export interface StructuredSearchOptions {
  *      `;`, `!`, `?`, `[`, `]`, `{`, `}`, `~`, `|`, `&`, `/`, `\`,
  *      and any character that the FTS5 parser treats as syntax.
  *   3. Drop any token that becomes empty after stripping.
+ *   4. B10 — drop standalone FTS5 operators (`OR`, `AND`, `NOT`,
+ *      `NEAR`, case-insensitive) and strip leading `-` (FTS5 NOT
+ *      prefix) so user input can never become OR/AND/NOT/NEAR or
+ *      leading-minus syntax. Internal hyphens (`hello-world`) are
+ *      preserved because `-` is only stripped at token start.
  *
- * We deliberately KEEP `-` because the unicode61 tokenizer treats
- * it as a token-internal character (e.g. "hello-world" is one
+ * We deliberately KEEP interior `-` because the unicode61 tokenizer
+ * treats it as a token-internal character (e.g. "hello-world" is one
  * token, not two). Stripping it would make hyphenated words
- * unsearchable, and the FTS5 "NOT" prefix form only kicks in
- * when `-` is the first character of a token — a case we never
- * produce from this sanitizer.
+ * unsearchable.
  *
  * An empty or whitespace-only input returns `null` so the caller
  * can short-circuit the SQL and return `[]`. The same is true
- * for an input made up entirely of operator characters.
+ * for an input made up entirely of operator characters or that
+ * sanitizes down to no usable query.
  *
  * Exported for unit tests.
  */
@@ -189,10 +193,18 @@ export function buildMatchQuery(raw: string | null | undefined): string | null {
   //    tokens. FTS5's implicit-AND treats a whitespace-separated
   //    list of bare terms as "all terms must match", which is
   //    exactly the AND semantics Phase 3.1 requires.
-  const tokens = stripped
-    .split(/\s+/)
-    .map((t) => t.trim())
-    .filter((t) => t.length > 0);
+  // 4. B10 — enforce implicit-AND-only: strip leading `-` per token
+  //    and drop standalone OR/AND/NOT/NEAR (case-insensitive).
+  const OPERATOR_TOKENS = new Set(['or', 'and', 'not', 'near']);
+  const tokens: string[] = [];
+  for (const part of stripped.split(/\s+/)) {
+    const t = part.trim();
+    if (t.length === 0) continue;
+    const unprefixed = t.replace(/^-+/, '');
+    if (unprefixed.length === 0) continue;
+    if (OPERATOR_TOKENS.has(unprefixed.toLowerCase())) continue;
+    tokens.push(unprefixed);
+  }
   if (tokens.length === 0) return null;
 
   return tokens.join(' ');

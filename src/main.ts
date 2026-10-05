@@ -52,15 +52,14 @@ async function main(): Promise<void> {
         }
       }
 
+      if (key.ctrl) return;
       switch (key.name) {
         case 'q':
-          if (!key.ctrl) {
-            shutdown();
-          }
+          shutdown();
           break;
         case 'escape':
-        case 'backspace':
-          // Reserved for Phase 2 navigation
+          // Back to the list when a message is open; otherwise no-op.
+          app.clearEmailSelection();
           break;
         case 'r':
           // Phase 2.5: trigger a sync of the current account / folder.
@@ -75,15 +74,34 @@ async function main(): Promise<void> {
           break;
         case 's':
           // Phase 5: summarize the selected email (detail pane).
-          if (!key.ctrl) {
-            void app.summarizeSelectedEmail();
-          }
+          void app.summarizeSelectedEmail();
           break;
         case 'd':
           // Phase 5: draft a reply into compose for review. Never sends.
-          if (!key.ctrl) {
-            void app.draftReplyWithAi();
-          }
+          void app.draftReplyWithAi();
+          break;
+        case 'j':
+        case 'down':
+          app.moveEmailSelection(1);
+          break;
+        case 'k':
+        case 'up':
+          app.moveEmailSelection(-1);
+          break;
+        case 'h':
+        case 'left':
+          app.moveFolderSelection(-1);
+          break;
+        case 'l':
+        case 'right':
+          app.moveFolderSelection(1);
+          break;
+        case 'tab':
+          app.moveFolderSelection(1);
+          break;
+        case 'return':
+          // Select the first message when nothing is selected.
+          app.moveEmailSelection(1);
           break;
         default:
           break;

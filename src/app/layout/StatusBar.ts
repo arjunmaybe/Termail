@@ -49,11 +49,11 @@ export class StatusBar extends BoxRenderable {
       flexDirection: 'row',
     });
 
+    // Primary shortcuts intentionally advertised here (q, /, r, s, d).
+    // Navigation keys (j/k, h/l, arrows, Tab, Enter, Esc) are
+    // implemented in main.ts but intentionally not shown to keep this
+    // one-line bar dense.
     this.leftGroup.add(this.kbdHint(ctx, 'q', 'Quit'));
-    this.leftGroup.add(this.kbdHint(ctx, '←/→', 'Folders'));
-    this.leftGroup.add(this.kbdHint(ctx, '↑/↓', 'Navigate'));
-    this.leftGroup.add(this.kbdHint(ctx, 'Enter', 'Open'));
-    this.leftGroup.add(this.kbdHint(ctx, 'Esc', 'Back'));
     this.leftGroup.add(this.kbdHint(ctx, '/', 'Search'));
     this.leftGroup.add(this.kbdHint(ctx, 'r', 'Sync'));
     this.leftGroup.add(this.kbdHint(ctx, 's', 'AI summary'));
@@ -128,7 +128,9 @@ export class StatusBar extends BoxRenderable {
       this.syncLabel.content = '● Syncing';
       this.syncLabel.fg = this.theme.warning;
     } else if (status === 'error') {
-      this.syncLabel.content = '● Error';
+      // B1 — surface the actual sanitized sync error (first line,
+      // length-limited) instead of a generic indicator.
+      this.syncLabel.content = formatSyncError(selectors.syncError);
       this.syncLabel.fg = this.theme.error;
     } else if (status === 'success') {
       this.syncLabel.content = '● Synced';
@@ -154,4 +156,21 @@ export class StatusBar extends BoxRenderable {
     this.unsubscribe = null;
     super.destroy();
   }
+}
+
+/**
+ * B1 — format a sync error for the status bar. Shows the first line of
+ * the sanitized error, length-limited, with a generic fallback when no
+ * message exists. No new panel; existing status UI only.
+ */
+export function formatSyncError(syncError: string | null): string {
+  const MAX_MESSAGE_LENGTH = 80;
+  if (!syncError) return '● Error';
+  const firstLine = syncError.split('\n')[0]?.trim() ?? '';
+  if (firstLine.length === 0) return '● Error';
+  const clipped =
+    firstLine.length > MAX_MESSAGE_LENGTH
+      ? firstLine.slice(0, MAX_MESSAGE_LENGTH)
+      : firstLine;
+  return `● Error: ${clipped}`;
 }

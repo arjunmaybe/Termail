@@ -162,12 +162,49 @@ const flaggedCount = computed(() => {
   return _emails.value.filter((e) => e.isFlagged).length;
 });
 
+/**
+ * B6 — per-folder unread counts combining persisted (DB-derived)
+ * `folder.unreadCount` with live in-memory counts.
+ *
+ * `folder.unreadCount` (populated via `MessageRepository`
+ * `GROUP BY folder_id`) is the source of truth for non-current folders
+ * and large folders whose slice is capped. Live counts preserve
+ * immediate current-folder `markAsRead` updates and legacy injected
+ * tests where stored counts are `0`. `max()` satisfies both; the
+ * `markAsRead` / `markAsUnread` / `updateEmail` actions keep the stored
+ * value live so `max()` never goes stale after a read change.
+ */
 const foldersWithUnread = computed(() => {
-  return _folders.value.map((folder) => ({
-    ...folder,
-    unreadCount: _emails.value.filter((e) => e.folderId === folder.id && !e.isRead).length,
-  }));
+  const liveByFolder = new Map<string, number>();
+  for (const e of _emails.value) {
+    if (!e.isRead) {
+      liveByFolder.set(e.folderId, (liveByFolder.get(e.folderId) ?? 0) + 1);
+    }
+  }
+  return _folders.value.map((folder) => {
+    const live = liveByFolder.get(folder.id) ?? 0;
+    const stored = folder.unreadCount ?? 0;
+    return {
+      ...folder,
+      unreadCount: Math.max(stored, live),
+    };
+  });
 });
+
+/**
+ * B6 — keep the stored folder `unreadCount` live when the in-memory
+ * read state changes. Floors at `0`; increments are unbounded. Used by
+ * `markAsRead` / `markAsUnread` / `updateEmail` / `removeEmail` so the
+ * `foldersWithUnread` `max()` never goes stale.
+ */
+function adjustFolderUnread(folderId: string, delta: number): void {
+  if (delta === 0) return;
+  _folders.value = _folders.value.map((f) =>
+    f.id === folderId
+      ? { ...f, unreadCount: Math.max(0, (f.unreadCount ?? 0) + delta) }
+      : f
+  );
+}
 
 // Actions
 export const actions = {
@@ -253,10 +290,22 @@ export const actions = {
   },
 
   updateEmail(emailId: string, updates: Partial<PersistedEmail>) {
+    if (updates.isRead !== undefined) {
+      const target = _emails.value.find((e) => e.id === emailId);
+      if (target && target.isRead !== updates.isRead) {
+        // Keep the stored folder count live so `foldersWithUnread`
+        // `max()` stays correct after an immediate read change.
+        adjustFolderUnread(target.folderId, updates.isRead ? -1 : 1);
+      }
+    }
     _emails.value = _emails.value.map((e) => (e.id === emailId ? { ...e, ...updates } : e));
   },
 
   removeEmail(emailId: string) {
+    const target = _emails.value.find((e) => e.id === emailId);
+    if (target && !target.isRead) {
+      adjustFolderUnread(target.folderId, -1);
+    }
     _emails.value = _emails.value.filter((e) => e.id !== emailId);
     if (_selectedEmailId.value === emailId) {
       _selectedEmailId.value = _emails.value[0]?.id || null;
@@ -268,11 +317,21 @@ export const actions = {
   },
 
   markAsRead(emailId: string) {
+    const target = _emails.value.find((e) => e.id === emailId);
+    const wasUnread = target ? !target.isRead : false;
     _emails.value = _emails.value.map((e) => (e.id === emailId ? { ...e, isRead: true } : e));
+    if (wasUnread && target) {
+      adjustFolderUnread(target.folderId, -1);
+    }
   },
 
   markAsUnread(emailId: string) {
+    const target = _emails.value.find((e) => e.id === emailId);
+    const wasRead = target ? target.isRead : false;
     _emails.value = _emails.value.map((e) => (e.id === emailId ? { ...e, isRead: false } : e));
+    if (wasRead && target) {
+      adjustFolderUnread(target.folderId, 1);
+    }
   },
 
   toggleFlag(emailId: string) {

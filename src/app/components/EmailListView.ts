@@ -1,5 +1,8 @@
 /**
- * Email list view - placeholder for Phase 2
+ * Email list view - folder/search result list with selection highlight.
+ * Selection is driven by `AppState.selectedEmailId` (keyboard via
+ * `App.moveEmailSelection`, mouse via click). Empty states distinguish
+ * no mail, no search results, query issues, and search errors.
  */
 
 import { BoxRenderable, type RenderContext, TextAttributes, TextRenderable } from '@opentui/core';
