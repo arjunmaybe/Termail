@@ -94,6 +94,100 @@ export class SyncService {
   }
 
   /**
+   * Bootstrap a fresh account with no persisted folders: discover folders
+   * over IMAP, persist them, pick a sensible default (INBOX preferred),
+   * then sync that folder's messages incrementally.
+   *
+   * Unlike `syncAccountFolder`, no folder path is required. The default
+   * is chosen among server-selectable folders only (`selectable !== false`).
+   * Folder discovery is persisted before any message fetch, so when the
+   * message sync fails the discovered folders survive in the DB while the
+   * returned outcome stays an explicit `auth`/`network` failure (never a
+   * misleading success, never an advanced checkpoint).
+   */
+  async syncAccount(account: AccountConfig): Promise<SyncOutcome> {
+    if (!account || !account.id) {
+      return { kind: 'no-account', message: 'No account configured' };
+    }
+
+    resetImapService();
+    const imap = this.factory(account);
+
+    try {
+      try {
+        await imap.connect();
+      } catch (error) {
+        return mapConnectError(error);
+      }
+
+      let folders;
+      try {
+        const folderResult = await imap.syncFolders();
+        folders = folderResult.folders;
+      } catch (error) {
+        return mapConnectError(error);
+      }
+
+      if (!folders || folders.length === 0) {
+        return { kind: 'no-folder', message: 'No folders found on server' };
+      }
+
+      this.repository.ensureAccountRow(toSafeAccountInput(account));
+      for (const f of folders) {
+        this.repository.ensureFolderRow(account.id, f);
+      }
+
+      const target = pickDefaultFolder(folders);
+      if (!target) {
+        return { kind: 'no-folder', message: 'No selectable folders on server' };
+      }
+
+      let result;
+      try {
+        const folderId = deriveFolderId(account.id, target.path);
+        const checkpoint = this.repository.getSyncState(account.id, folderId);
+        const limits = buildImapSyncLimits(checkpoint);
+        result = await imap.syncMessages(target.path, limits ? { limits } : {});
+      } catch (error) {
+        this.recordSyncFailure(account, target, error);
+        return mapMessageError(error);
+      }
+      try {
+        this.repository.upsertMessages(toSafeAccountInput(account), target, result.messages);
+      } catch (error) {
+        this.recordSyncFailure(account, target, error);
+        return mapMessageError(error);
+      }
+
+      const persistedFolders = this.repository.listFoldersForAccount(account.id);
+      const targetId =
+        persistedFolders.find((f) => f.fullName === target.path)?.id ?? null;
+      const messages = targetId
+        ? this.repository.listByFolder(account.id, targetId, 500)
+        : [];
+
+      logger.info('Sync completed', {
+        accountId: account.id,
+        folder: target.path,
+        folders: persistedFolders.length,
+        messages: messages.length,
+      });
+
+      return { kind: 'ok', folders: persistedFolders, messages };
+    } finally {
+      try {
+        await imap.disconnect();
+      } catch (error) {
+        logger.warn('IMAP disconnect failed; ignoring', {
+          accountId: account.id,
+          error: getErrorMessage(error),
+        });
+      }
+      resetImapService();
+    }
+  }
+
+  /**
    * Sync a single folder of an account. The IMAP folder is identified
    * by its server path (`PersistedFolder.fullName`); the account is
    * identified by `AccountConfig`.
@@ -239,6 +333,33 @@ export class SyncService {
       });
     }
   }
+}
+
+/**
+ * Pick the default folder for a fresh bootstrap. Considers only
+ * server-selectable folders. Prefers INBOX (by type or literal path,
+ * matching `AppState.setFolders` which prefers `type === 'inbox'`);
+ * otherwise the first selectable folder in server order.
+ */
+function pickDefaultFolder(folders: ReadonlyArray<SyncFolder>): SyncFolder | undefined {
+  const candidates = folders.filter((f) => f.selectable !== false);
+  if (candidates.length === 0) return undefined;
+  const inbox =
+    candidates.find((f) => f.type === 'inbox') ??
+    candidates.find((f) => f.path.toUpperCase() === 'INBOX');
+  return inbox ?? candidates[0];
+}
+
+/**
+ * Map a message-fetch/persist failure to a typed `SyncOutcome` without
+ * throwing, so bootstrap callers can still apply persisted folders.
+ * Authentication failures stay `auth`; everything else is `network`.
+ */
+function mapMessageError(error: unknown): SyncOutcome {
+  if (error instanceof AuthenticationError) {
+    return { kind: 'auth', message: getErrorMessage(error) };
+  }
+  return { kind: 'network', message: getErrorMessage(error) };
 }
 
 /** Map a low-level connect/sync error to a typed `SyncOutcome`. */
