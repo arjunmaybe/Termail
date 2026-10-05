@@ -258,7 +258,7 @@ export class App extends BoxRenderable {
       return;
     }
     if (!folderId) {
-      actions.setSyncError('No folder selected. Press r after folders load.');
+      await this.requestBootstrapSync(accountId);
       return;
     }
     const folder = selectors.folders.find((f) => f.id === folderId);
@@ -340,6 +340,103 @@ export class App extends BoxRenderable {
     this.syncInFlight = false;
     actions.setLoadingFolders(false);
     actions.setLoadingEmails(false);
+  }
+
+  /**
+   * Bootstrap a fresh account with no persisted folders. Discovers folders
+   * over IMAP via `SyncService.syncAccount`, persists them, selects the
+   * default (INBOX preferred), and syncs its messages.
+   *
+   * Folder discovery is persisted before message fetch, so when message
+   * sync fails the discovered folders are reloaded from the DB into the
+   * sidebar while the outcome stays an explicit failure (never a
+   * misleading success, never an advanced checkpoint).
+   */
+  private async requestBootstrapSync(accountId: string): Promise<void> {
+    const accounts = selectors.accounts;
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) {
+      actions.setSyncError('Account not found in state');
+      return;
+    }
+    if (this.syncInFlight) return;
+    this.syncInFlight = true;
+
+    const accountConfig = toAccountConfig(account);
+    const requestAccountId = accountId;
+
+    actions.setLoadingFolders(true);
+    actions.setLoadingEmails(true);
+    actions.setSyncStatus('syncing');
+
+    let outcome: SyncOutcome;
+    try {
+      const svc = this.syncService as SyncService & {
+        syncAccount?: (a: AccountConfig) => Promise<SyncOutcome>;
+      };
+      if (typeof svc.syncAccount !== 'function') {
+        outcome = { kind: 'no-folder', message: 'No folder selected' };
+      } else {
+        outcome = await svc.syncAccount(accountConfig);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      outcome =
+        error instanceof AuthenticationError
+          ? { kind: 'auth', message }
+          : { kind: 'network', message };
+    }
+
+    const accountStillRelevant = selectors.currentAccountId === requestAccountId;
+
+    switch (outcome.kind) {
+      case 'ok': {
+        if (accountStillRelevant) {
+          const folders: Folder[] = outcome.folders.map(toFolderProjection);
+          actions.setFolders(folders);
+          actions.setEmails(outcome.messages);
+        }
+        actions.setSyncStatus('success');
+        break;
+      }
+      case 'auth':
+      case 'network':
+      case 'no-folder':
+      case 'no-account': {
+        // Preserve discovered folders: folder discovery is persisted before
+        // message fetch, so reload from the DB even on failure. Best-effort;
+        // a reload failure must not mask the original sync error.
+        if (accountStillRelevant) {
+          this.reloadFoldersForAccount(accountId);
+        }
+        actions.setSyncError(
+          outcome.kind === 'no-account' ? 'No account configured' : outcome.message
+        );
+        break;
+      }
+    }
+
+    this.syncInFlight = false;
+    actions.setLoadingFolders(false);
+    actions.setLoadingEmails(false);
+  }
+
+  /** Reload persisted folders into state. Best-effort; never throws. */
+  private reloadFoldersForAccount(accountId: string): void {
+    try {
+      const config = getConfigStore().getConfig();
+      const database = getDatabase(config);
+      const repository = new MessageRepository(database);
+      const persisted = repository.listFoldersForAccount(accountId);
+      if (persisted.length > 0) {
+        actions.setFolders(persisted.map(toFolderProjection));
+      }
+    } catch (error) {
+      logger.warn('Failed to reload folders after sync; ignoring', {
+        accountId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   // -----------------------------------------------------------------
