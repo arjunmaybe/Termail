@@ -11,7 +11,8 @@
  * unread count.
  */
 
-import { type CliRenderer, createCliRenderer } from '@opentui/core';
+import { type CliRenderer } from '@opentui/core';
+import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FolderTabs } from '../../src/app/components/FolderTabs.js';
 import type { PersistedEmail } from '../../src/core/database/index.js';
@@ -88,12 +89,36 @@ describe('FolderTabs', () => {
     tabs: FolderTabs;
     renderer: CliRenderer;
   }> {
-    renderer = await createCliRenderer({ useMouse: false, exitOnCtrlC: false });
-    const tabs = new FolderTabs(renderer, {
-      id: 'folder-tabs-test',
-      themeMode: 'dark',
-    });
-    return { tabs, renderer };
+    if (renderer) {
+      try {
+        renderer.stop();
+        renderer.destroy();
+      } catch {
+        /* ignore */
+      }
+      renderer = null;
+    }
+    renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
+    try {
+      const tabs = new FolderTabs(renderer, {
+        id: 'folder-tabs-test',
+        themeMode: 'dark',
+      });
+      return { tabs, renderer };
+    } catch (e) {
+      try {
+        renderer.stop();
+      } catch {
+        /* ignore */
+      }
+      try {
+        renderer.destroy();
+      } catch {
+        /* ignore */
+      }
+      renderer = null;
+      throw e;
+    }
   }
 
   function tabContent(tabs: FolderTabs, folderId: string): string | null {

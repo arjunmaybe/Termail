@@ -5,7 +5,8 @@
  * the StatusBar (first line, length-limited, fallback to generic).
  */
 
-import { type CliRenderer, createCliRenderer } from '@opentui/core';
+import { type CliRenderer } from '@opentui/core';
+import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { StatusBar, formatSyncError } from '../../src/app/layout/StatusBar.js';
 import { actions } from '../../src/core/state/AppState.js';
@@ -39,7 +40,7 @@ describe('B1 StatusBar sync error visibility', () => {
   });
 
   it('shows authentication errors in the status bar', async () => {
-    renderer = await createCliRenderer({ useMouse: false, exitOnCtrlC: false });
+    renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
     const bar = new StatusBar(renderer, { themeMode: 'dark' });
     try {
       actions.setSyncError('Authentication failed: bad password');
@@ -52,7 +53,7 @@ describe('B1 StatusBar sync error visibility', () => {
   });
 
   it('shows network errors in the status bar', async () => {
-    renderer = await createCliRenderer({ useMouse: false, exitOnCtrlC: false });
+    renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
     const bar = new StatusBar(renderer, { themeMode: 'dark' });
     try {
       actions.setSyncError('Network error: ECONNREFUSED');
@@ -64,7 +65,7 @@ describe('B1 StatusBar sync error visibility', () => {
   });
 
   it('shows only the first line and limits display length', async () => {
-    renderer = await createCliRenderer({ useMouse: false, exitOnCtrlC: false });
+    renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
     const bar = new StatusBar(renderer, { themeMode: 'dark' });
     try {
       actions.setSyncError(`first line here\nsecond line here\nthird`);
@@ -87,7 +88,7 @@ describe('B1 StatusBar sync error visibility', () => {
   });
 
   it('status bar falls back when status is error with no message', async () => {
-    renderer = await createCliRenderer({ useMouse: false, exitOnCtrlC: false });
+    renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
     const bar = new StatusBar(renderer, { themeMode: 'dark' });
     try {
       actions.reset();

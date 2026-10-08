@@ -87,25 +87,39 @@ function makeMessage(over: Partial<SyncMessage> = {}): SyncMessage {
   };
 }
 
-async function makeApp(): Promise<{ app: App; renderer: Awaited<ReturnType<typeof import('@opentui/core').createCliRenderer>> }> {
+async function makeApp(): Promise<{ app: App; renderer: Awaited<ReturnType<typeof import('@opentui/core/testing').createTestRenderer>>['renderer'] }> {
   const configStore = getConfigStore();
   const config = configStore.getConfig();
   const database = getDatabase(config);
 
-  const rendererMod = await import('@opentui/core');
-  const renderer = await rendererMod.createCliRenderer({
-    useMouse: false,
-    exitOnCtrlC: false,
+  const rendererMod = await import('@opentui/core/testing');
+  const { renderer } = await rendererMod.createTestRenderer({
+    width: 120,
+    height: 40,
   });
-  const app = new App(renderer, { id: 'app', initialTheme: 'dark' });
+  try {
+    const app = new App(renderer, { id: 'app', initialTheme: 'dark' });
 
-  // Wait for `initialize()` to finish so the search controller is
-  // available.
-  for (let i = 0; i < 100; i += 1) {
-    if (app.isInitialized()) break;
-    await new Promise((r) => setTimeout(r, 5));
+    // Wait for `initialize()` to finish so the search controller is
+    // available.
+    for (let i = 0; i < 100; i += 1) {
+      if (app.isInitialized()) break;
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    return { app, renderer };
+  } catch (e) {
+    try {
+      renderer.stop();
+    } catch {
+      /* ignore */
+    }
+    try {
+      renderer.destroy();
+    } catch {
+      /* ignore */
+    }
+    throw e;
   }
-  return { app, renderer };
 }
 
 describe('App search orchestration', () => {

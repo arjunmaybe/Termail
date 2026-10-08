@@ -107,19 +107,33 @@ describe('B2 App AI/compose guard', () => {
 
   async function makeAppWithFakeAi(fakeAi: unknown) {
     const { App } = await import('../../src/app/App.js');
-    const renderer = await import('@opentui/core').then((m) =>
-      m.createCliRenderer({ useMouse: false, exitOnCtrlC: false })
-    );
-    const app = new App(renderer, {
-      id: 'app-b2',
-      initialTheme: 'dark',
-      aiService: fakeAi as AiService,
-    });
-    for (let i = 0; i < 50; i += 1) {
-      if (app.isInitialized()) break;
-      await new Promise((r) => setTimeout(r, 5));
+    const renderer = (await import('@opentui/core/testing').then((m) =>
+      m.createTestRenderer({ width: 120, height: 40 })
+    )).renderer;
+    try {
+      const app = new App(renderer, {
+        id: 'app-b2',
+        initialTheme: 'dark',
+        aiService: fakeAi as AiService,
+      });
+      for (let i = 0; i < 50; i += 1) {
+        if (app.isInitialized()) break;
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      return { app, renderer };
+    } catch (e) {
+      try {
+        renderer.stop();
+      } catch {
+        /* ignore */
+      }
+      try {
+        renderer.destroy();
+      } catch {
+        /* ignore */
+      }
+      throw e;
     }
-    return { app, renderer };
   }
 
   it('active compose + d => compose unchanged, AI not called', async () => {
