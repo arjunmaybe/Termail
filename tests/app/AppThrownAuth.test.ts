@@ -67,19 +67,33 @@ describe('App.requestSync thrown auth mapping', () => {
 
   async function makeApp(fake: { syncAccountFolder: ReturnType<typeof vi.fn> }) {
     const { App } = await import('../../src/app/App.js');
-    const renderer = await import('@opentui/core').then((m) =>
-      m.createCliRenderer({ useMouse: false, exitOnCtrlC: false })
-    );
-    const app = new App(renderer, {
-      id: 'app-autht',
-      initialTheme: 'dark',
-      syncService: fake as never,
-    });
-    for (let i = 0; i < 50; i += 1) {
-      if (app.isInitialized()) break;
-      await new Promise((r) => setTimeout(r, 5));
+    const renderer = (await import('@opentui/core/testing').then((m) =>
+      m.createTestRenderer({ width: 120, height: 40 })
+    )).renderer;
+    try {
+      const app = new App(renderer, {
+        id: 'app-autht',
+        initialTheme: 'dark',
+        syncService: fake as never,
+      });
+      for (let i = 0; i < 50; i += 1) {
+        if (app.isInitialized()) break;
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      return { app, renderer };
+    } catch (e) {
+      try {
+        renderer.stop();
+      } catch {
+        /* ignore */
+      }
+      try {
+        renderer.destroy();
+      } catch {
+        /* ignore */
+      }
+      throw e;
     }
-    return { app, renderer };
   }
 
   it('a thrown AuthenticationError surfaces its message as a sync error', async () => {

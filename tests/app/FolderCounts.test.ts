@@ -13,7 +13,8 @@
 import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type CliRenderer, createCliRenderer } from '@opentui/core';
+import { type CliRenderer } from '@opentui/core';
+import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FolderTabs } from '../../src/app/components/FolderTabs.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
@@ -247,15 +248,18 @@ describe('B6 folder counts from persisted emails', () => {
     const inboxEmails = repo.listByFolder('work', 'work:INBOX', 500);
     actions.setEmails(inboxEmails);
 
-    renderer = await createCliRenderer({ useMouse: false, exitOnCtrlC: false });
+    renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
     const tabs = new FolderTabs(renderer, { id: 'folder-tabs-b6', themeMode: 'dark' });
-    expect(tabContent(tabs, 'work:INBOX')).toBe('INBOX (3)');
-    // Sent shows DB truth even though the slice has no Sent rows.
-    expect(tabContent(tabs, 'work:Sent')).toBe('Sent (2)');
-    tabs.destroy();
-    renderer.stop();
-    renderer.destroy();
-    renderer = null;
+    try {
+      expect(tabContent(tabs, 'work:INBOX')).toBe('INBOX (3)');
+      // Sent shows DB truth even though the slice has no Sent rows.
+      expect(tabContent(tabs, 'work:Sent')).toBe('Sent (2)');
+    } finally {
+      tabs.destroy();
+      renderer.stop();
+      renderer.destroy();
+      renderer = null;
+    }
   });
 
   it('current-folder mark-as-read updates remain immediate', async () => {
@@ -273,18 +277,20 @@ describe('B6 folder counts from persisted emails', () => {
     const inboxEmails: PersistedEmail[] = repo.listByFolder('work', 'work:INBOX', 500);
     actions.setEmails(inboxEmails);
 
-    renderer = await createCliRenderer({ useMouse: false, exitOnCtrlC: false });
+    renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
     const tabs = new FolderTabs(renderer, { id: 'folder-tabs-b6-live', themeMode: 'dark' });
-    expect(tabContent(tabs, 'work:INBOX')).toBe('INBOX (3)');
+    try {
+      expect(tabContent(tabs, 'work:INBOX')).toBe('INBOX (3)');
 
-    actions.markAsRead(inboxEmails[0]!.id);
-    expect(tabContent(tabs, 'work:INBOX')).toBe('INBOX (2)');
-    // Non-current untouched.
-    expect(tabContent(tabs, 'work:Sent')).toBe('Sent (2)');
-
-    tabs.destroy();
-    renderer.stop();
-    renderer.destroy();
-    renderer = null;
+      actions.markAsRead(inboxEmails[0]!.id);
+      expect(tabContent(tabs, 'work:INBOX')).toBe('INBOX (2)');
+      // Non-current untouched.
+      expect(tabContent(tabs, 'work:Sent')).toBe('Sent (2)');
+    } finally {
+      tabs.destroy();
+      renderer.stop();
+      renderer.destroy();
+      renderer = null;
+    }
   });
 });

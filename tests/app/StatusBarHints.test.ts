@@ -6,7 +6,8 @@
  * one-line bar dense.
  */
 
-import { type CliRenderer, createCliRenderer } from '@opentui/core';
+import { type CliRenderer } from '@opentui/core';
+import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { StatusBar } from '../../src/app/layout/StatusBar.js';
 import { actions } from '../../src/core/state/AppState.js';
@@ -36,7 +37,7 @@ describe('B3 StatusBar keyboard hints', () => {
   });
 
   it('advertises the primary shortcuts while omitting navigation keys', async () => {
-    renderer = await createCliRenderer({ useMouse: false, exitOnCtrlC: false });
+    renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
     const bar = new StatusBar(renderer, { themeMode: 'dark' });
     try {
       const ids = hintIds(bar);

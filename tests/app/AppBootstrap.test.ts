@@ -117,19 +117,33 @@ describe('App.requestSync fresh-account bootstrap', () => {
     syncAccount?: ReturnType<typeof vi.fn>;
   }) {
     const { App } = await import('../../src/app/App.js');
-    const renderer = await import('@opentui/core').then((m) =>
-      m.createCliRenderer({ useMouse: false, exitOnCtrlC: false })
-    );
-    const app = new App(renderer, {
-      id: 'app-boot',
-      initialTheme: 'dark',
-      syncService: fake as never,
-    });
-    for (let i = 0; i < 50; i += 1) {
-      if (app.isInitialized()) break;
-      await new Promise((r) => setTimeout(r, 5));
+    const renderer = (await import('@opentui/core/testing').then((m) =>
+      m.createTestRenderer({ width: 120, height: 40 })
+    )).renderer;
+    try {
+      const app = new App(renderer, {
+        id: 'app-boot',
+        initialTheme: 'dark',
+        syncService: fake as never,
+      });
+      for (let i = 0; i < 50; i += 1) {
+        if (app.isInitialized()) break;
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      return { app, renderer };
+    } catch (e) {
+      try {
+        renderer.stop();
+      } catch {
+        /* ignore */
+      }
+      try {
+        renderer.destroy();
+      } catch {
+        /* ignore */
+      }
+      throw e;
     }
-    return { app, renderer };
   }
 
   it('bootstraps folders and messages on first r with no persisted folders', async () => {

@@ -9,7 +9,8 @@
  * - Empty lists are no-ops.
  */
 
-import { type CliRenderer, createCliRenderer } from '@opentui/core';
+import { type CliRenderer } from '@opentui/core';
+import { createTestRenderer } from '@opentui/core/testing';
 import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -94,7 +95,7 @@ describe('App keyboard navigation', () => {
       `INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, ?, ?, ?, ?)`
     ).run('work:Sent', 'work', 'Sent', 'Sent', 'sent', '/');
 
-    renderer = await createCliRenderer({ useMouse: false, exitOnCtrlC: false });
+    renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
     app = new App(renderer, { id: 'app-nav', initialTheme: 'dark' });
     for (let i = 0; i < 50; i += 1) {
       if (app.isInitialized()) break;
