@@ -31,5 +31,5 @@
     "vitest": "^2.1.1"
   },
   "trustedDependencies": ["@biomejs/biome"],
-  "packageManager": "bun@1.1.29"
+  "packageManager": "bun@1.4.1"
 }
