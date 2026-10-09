@@ -22,7 +22,7 @@ const account: AccountConfig = {
   smtpMode: 'implicit-tls',
 };
 
-function makeController(sendMail: ReturnType<typeof vi.fn>, acct: AccountConfig | null = account) {
+function makeController(sendMail: SmtpService['sendMail'], acct: AccountConfig | null = account) {
   const service = new SmtpService({
     factory: () => ({ send: async () => {} }) as any,
     env: {},
