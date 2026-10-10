@@ -6,7 +6,7 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "bun run --watch src/main.ts",
-    "build": "bun build src/main.ts --outdir dist --target bun",
+    "build": "bun build src/main.ts --outdir dist --target bun --external '@opentui/core-*'",
     "start": "bun run dist/main.js",
     "test": "bun test",
     "test:sequential": "bun test --parallel=1",
