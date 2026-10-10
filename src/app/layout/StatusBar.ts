@@ -4,6 +4,7 @@
 
 import { BoxRenderable, type RenderContext, TextAttributes, TextRenderable } from '@opentui/core';
 import { selectors, subscribe } from '../../core/state/AppState.js';
+import { sanitizeForTerminal } from '../../core/utils/terminal.js';
 import type { Theme } from '../theme.js';
 import { getTheme } from '../theme.js';
 
@@ -116,7 +117,8 @@ export class StatusBar extends BoxRenderable {
 
   private refresh(): void {
     const folder = selectors.currentFolder;
-    this.folderLabel.content = `Folder: ${folder?.name ?? 'None'}`;
+    // Folder names come from the IMAP server: sanitize before display.
+    this.folderLabel.content = sanitizeForTerminal(`Folder: ${folder?.name ?? 'None'}`);
 
     const emails = selectors.emails;
     this.emailCount.content = `Emails: ${emails.length}`;
@@ -162,6 +164,9 @@ export class StatusBar extends BoxRenderable {
  * Format a sync error for the status bar. Shows the first line of
  * the sanitized error, length-limited, with a generic fallback when no
  * message exists. No new panel; existing status UI only.
+ *
+ * Sync errors can carry IMAP server response text, so the display
+ * string is stripped of terminal control bytes before it is returned.
  */
 export function formatSyncError(syncError: string | null): string {
   const MAX_MESSAGE_LENGTH = 80;
@@ -172,5 +177,5 @@ export function formatSyncError(syncError: string | null): string {
     firstLine.length > MAX_MESSAGE_LENGTH
       ? firstLine.slice(0, MAX_MESSAGE_LENGTH)
       : firstLine;
-  return `● Error: ${clipped}`;
+  return sanitizeForTerminal(`● Error: ${clipped}`);
 }

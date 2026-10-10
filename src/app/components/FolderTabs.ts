@@ -4,6 +4,7 @@
 
 import { BoxRenderable, type RenderContext, TextAttributes, TextRenderable } from '@opentui/core';
 import { actions, selectors, subscribe } from '../../core/state/AppState.js';
+import { sanitizeForTerminal } from '../../core/utils/terminal.js';
 import type { Theme } from '../theme.js';
 import { getTheme } from '../theme.js';
 
@@ -85,7 +86,9 @@ export class FolderTabs extends BoxRenderable {
       // current-folder mark-as-read updates.
       const folderWithUnread = selectors.foldersWithUnread.find((f) => f.id === folder.id);
       const unread = folderWithUnread?.unreadCount ?? 0;
-      const label = unread > 0 ? `${folder.name} (${unread})` : folder.name;
+      // Folder names come from the IMAP server: sanitize before display.
+      const safeName = sanitizeForTerminal(folder.name);
+      const label = unread > 0 ? `${safeName} (${unread})` : safeName;
       const tab = new TextRenderable(this.ctx, {
         id: `folder-tab-${folder.id}`,
         content: label,

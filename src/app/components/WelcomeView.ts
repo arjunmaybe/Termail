@@ -4,6 +4,7 @@
 
 import { BoxRenderable, type RenderContext, TextAttributes, TextRenderable } from '@opentui/core';
 import { selectors, subscribe } from '../../core/state/AppState.js';
+import { sanitizeForTerminal } from '../../core/utils/terminal.js';
 import type { Theme } from '../theme.js';
 import { getTheme } from '../theme.js';
 
@@ -67,7 +68,8 @@ export class WelcomeView extends BoxRenderable {
       this.subtitle.content =
         'No accounts configured. Add an account to config.json, then press \'r\' to sync.';
     } else if (folder) {
-      this.subtitle.content = `No emails in ${folder.name} yet`;
+      // Folder names come from the IMAP server: sanitize before display.
+      this.subtitle.content = `No emails in ${sanitizeForTerminal(folder.name)} yet`;
     } else {
       this.subtitle.content = 'No emails synced yet';
     }
