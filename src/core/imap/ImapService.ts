@@ -3,7 +3,10 @@
  *
  * Responsibilities (Phase 2):
  *   - Build a connection from an `AccountConfig` + env-resolved credentials.
- *   - Connect and authenticate (TLS, STARTTLS, or cleartext per config).
+ *   - Connect and authenticate over TLS by default. Cleartext IMAP
+ *     authentication (`useTls: false`) is refused unless the account
+ *     explicitly opts in with `allowInsecureAuth: true`, so a password or
+ *     OAuth token is never sent unencrypted silently.
  *   - List mailboxes/folders (raw and normalized).
  *   - Synchronize folders: classify, dedupe, and order.
  *   - Synchronize messages: fetch, parse, normalize, dedupe.
@@ -111,6 +114,18 @@ export class ImapService {
     this.lastCredentials = credentials;
 
     const options = buildImapOptions(this.account, credentials);
+
+    if (!this.account.useTls && this.account.allowInsecureAuth === true) {
+      // Explicit opt-in path only: identifiers, never the secret or content.
+      logger.warn(
+        'IMAP insecure authentication fallback is enabled for this account (explicit allowInsecureAuth opt-in); authentication may be unencrypted if STARTTLS is unavailable or downgraded',
+        {
+          accountId: this.account.id,
+          host: this.account.host,
+          port: this.account.port,
+        }
+      );
+    }
 
     let client: ImapFlow;
     try {
@@ -333,6 +348,14 @@ export class ImapService {
  * Build the `ImapFlow` options from the account config + resolved
  * credentials. Exported so tests can assert the options shape without
  * standing up a full service.
+ *
+ * Refuses cleartext authentication: when `useTls` is false, the account
+ * must explicitly set `allowInsecureAuth: true`, otherwise an
+ * `AuthenticationError` is thrown before any socket is opened and the
+ * password / OAuth token is never transmitted. The opt-in path keeps
+ * imapflow's default opportunistic STARTTLS (no `doSTARTTLS` override),
+ * so servers that support it are still upgraded; the explicit warning is
+ * emitted by `connect()`.
  */
 export function buildImapOptions(
   account: ImapAccountConfig,
@@ -341,6 +364,15 @@ export function buildImapOptions(
   if (!account.host) {
     throw new NetworkError(
       `Account "${account.id}" is missing an IMAP host. Add a "host" field to the account config.`
+    );
+  }
+
+  if (!account.useTls && account.allowInsecureAuth !== true) {
+    throw new AuthenticationError(
+      `Account "${account.id}" disables TLS (useTls: false) without opting into insecure authentication. ` +
+        `Refusing to send the password or OAuth token over an unencrypted IMAP connection. ` +
+        `Set "allowInsecureAuth": true for this account to permit cleartext authentication, ` +
+        `or re-enable TLS with "useTls": true.`
     );
   }
 
