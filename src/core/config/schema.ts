@@ -94,12 +94,28 @@ export function resolveSmtpDefaults(input: {
  * AI assistance settings (Phase 5). Disabled by default; the user opts in
  * explicitly. The API key is NEVER stored here — it comes from the
  * `TERMAIL_AI_API_KEY` environment variable at request time.
+ *
+ * The endpoint must use HTTPS so the API key and selected email content
+ * are never sent over plaintext HTTP. The check uses the parsed URL
+ * protocol, not a string-prefix match.
  */
+function isHttpsEndpoint(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export const aiConfigSchema = z.object({
   enabled: z.boolean().default(false),
   provider: z.enum(['openrouter']).default('openrouter'),
   model: z.string().min(1).default('meta-llama/llama-3.3-70b-instruct'),
-  endpoint: z.string().url().default('https://openrouter.ai/api/v1/chat/completions'),
+  endpoint: z
+    .string()
+    .url()
+    .refine(isHttpsEndpoint, { message: 'AI endpoint must use HTTPS' })
+    .default('https://openrouter.ai/api/v1/chat/completions'),
   maxBodyChars: z.number().int().min(500).max(100000).default(8000),
   requestTimeoutMs: z.number().int().min(1000).max(300000).default(30000),
 });
