@@ -12,6 +12,7 @@ import type { AccountConfig } from '../core/types/config.js';
 import type { Account, Folder } from '../core/types/index.js';
 import { AuthenticationError } from '../core/utils/errors.js';
 import { logger } from '../core/utils/logger.js';
+import { sanitizeForTerminal } from '../core/utils/terminal.js';
 import { SearchInputBar } from './components/SearchInputBar.js';
 import { ContentPane } from './layout/ContentPane.js';
 import { Sidebar } from './layout/Sidebar.js';
@@ -203,7 +204,11 @@ export class App extends BoxRenderable {
       const message = error instanceof Error ? error.message : String(error);
       logger.error('Initialization failed', { error: message });
       this.initError = message;
-      this.errorBanner.content = `Initialization Error: ${message}  (press q to quit)`;
+      // Init failures can surface server/library error text: sanitize
+      // the display string (the stored/logged message is untouched).
+      this.errorBanner.content = sanitizeForTerminal(
+        `Initialization Error: ${message}  (press q to quit)`
+      );
       this.banner.visible = false;
       this.errorBanner.visible = true;
     }

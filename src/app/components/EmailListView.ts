@@ -8,6 +8,7 @@
 import { BoxRenderable, type RenderContext, TextAttributes, TextRenderable } from '@opentui/core';
 import { actions, selectors, subscribe } from '../../core/state/AppState.js';
 import type { PersistedEmail } from '../../core/database/index.js';
+import { sanitizeForTerminal } from '../../core/utils/terminal.js';
 import type { Theme } from '../theme.js';
 import { getTheme } from '../theme.js';
 
@@ -90,10 +91,12 @@ export class EmailListView extends BoxRenderable {
       if (isSearching) {
         if (selectors.searchError) {
           this.emptyTitle.content = 'Search failed';
-          this.emptySubtitle.content = selectors.searchError;
+          this.emptySubtitle.content = sanitizeForTerminal(selectors.searchError);
         } else if (selectors.searchIssues.length > 0) {
           this.emptyTitle.content = 'Query has issues';
-          this.emptySubtitle.content = selectors.searchIssues.map((i) => i.message).join('; ');
+          this.emptySubtitle.content = sanitizeForTerminal(
+            selectors.searchIssues.map((i) => i.message).join('; ')
+          );
         } else {
           this.emptyTitle.content = 'No search results';
           this.emptySubtitle.content = 'Try different terms or operators';
@@ -132,9 +135,11 @@ export class EmailListView extends BoxRenderable {
       justifyContent: 'space-between',
       width: '100%',
     });
+    // Sender names/addresses and subjects are remote content: strip
+    // terminal control bytes before rendering (see terminal.ts).
     const from = new TextRenderable(this.ctx, {
       id: `email-item-from-${email.id}`,
-      content: email.fromAddresses.map((a) => a.name || a.address).join(', '),
+      content: sanitizeForTerminal(email.fromAddresses.map((a) => a.name || a.address).join(', ')),
       fg: isSelected
         ? this.theme.textPrimary
         : email.isRead
@@ -152,7 +157,7 @@ export class EmailListView extends BoxRenderable {
 
     const subject = new TextRenderable(this.ctx, {
       id: `email-item-subject-${email.id}`,
-      content: email.subject || '(no subject)',
+      content: sanitizeForTerminal(email.subject) || '(no subject)',
       fg: this.theme.textSecondary,
     });
 

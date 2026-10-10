@@ -12,6 +12,7 @@ import {
 import { selectors, subscribe } from '../../core/state/AppState.js';
 import type { PersistedEmail } from '../../core/database/index.js';
 import type { EmailAddress } from '../../core/types/email.js';
+import { sanitizeForTerminal } from '../../core/utils/terminal.js';
 import { EmailListView } from '../components/EmailListView.js';
 import { WelcomeView } from '../components/WelcomeView.js';
 import type { Theme } from '../theme.js';
@@ -183,24 +184,29 @@ export class ContentPane extends BoxRenderable {
     this.emailListView.visible = false;
     this.emailDetail.visible = true;
 
-    this.detailSubject.content = email.subject || '(no subject)';
-    this.detailFrom.content = `From: ${formatAddresses(email.fromAddresses)}`;
-    this.detailTo.content = `To: ${formatAddresses(email.toAddresses)}`;
+    // Remote email strings are sanitized for terminal rendering:
+    // OpenTUI passes TextRenderable content to the terminal verbatim,
+    // so control bytes must be stripped before display. Stored content
+    // is never mutated; only the rendered strings are cleaned.
+    this.detailSubject.content = sanitizeForTerminal(email.subject) || '(no subject)';
+    this.detailFrom.content = `From: ${sanitizeForTerminal(formatAddresses(email.fromAddresses))}`;
+    this.detailTo.content = `To: ${sanitizeForTerminal(formatAddresses(email.toAddresses))}`;
     this.detailCc.content =
       email.ccAddresses.length > 0
-        ? `Cc: ${formatAddresses(email.ccAddresses)}`
+        ? `Cc: ${sanitizeForTerminal(formatAddresses(email.ccAddresses))}`
         : '';
     this.detailDate.content = formatDate(new Date(email.date * 1000));
     this.detailAttachments.content =
       email.attachments.length > 0
-        ? `Attachments: ${email.attachments
-            .map((a) => formatAttachment(a))
-            .join(', ')}`
+        ? `Attachments: ${sanitizeForTerminal(
+            email.attachments.map((a) => formatAttachment(a)).join(', ')
+          )}`
         : '';
     this.detailSeparator.content = '─'.repeat(Math.max(0, this.width - 4));
-    this.detailBody.content = email.bodyText && email.bodyText.length > 0
-      ? email.bodyText
-      : '(no body)';
+    this.detailBody.content =
+      email.bodyText && email.bodyText.length > 0
+        ? sanitizeForTerminal(email.bodyText)
+        : '(no body)';
     this.showAiSection(email.id);
   }
 
@@ -233,7 +239,8 @@ export class ContentPane extends BoxRenderable {
       this.aiHeader.content = 'AI error:';
       this.aiHeader.visible = true;
       this.aiHeader.fg = this.theme.error;
-      this.aiBody.content = selectors.aiError;
+      // AI error text can echo provider output; sanitize like email text.
+      this.aiBody.content = sanitizeForTerminal(selectors.aiError);
       this.aiBody.visible = true;
       this.aiBody.fg = this.theme.error;
       return;
@@ -244,7 +251,9 @@ export class ContentPane extends BoxRenderable {
       this.aiHeader.content = selectors.aiMode === 'draft' ? 'AI draft reply:' : 'AI summary:';
       this.aiHeader.visible = true;
       this.aiHeader.fg = this.theme.textSecondary;
-      this.aiBody.content = selectors.aiResult;
+      // Model output may carry escapes (including prompt-injected email
+      // text); sanitize before rendering.
+      this.aiBody.content = sanitizeForTerminal(selectors.aiResult);
       this.aiBody.visible = true;
       this.aiBody.fg = this.theme.textPrimary;
       return;

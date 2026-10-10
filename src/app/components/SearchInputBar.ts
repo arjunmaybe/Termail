@@ -23,6 +23,7 @@
 
 import { BoxRenderable, type RenderContext, TextAttributes, TextRenderable } from '@opentui/core';
 import { selectors, subscribe } from '../../core/state/AppState.js';
+import { sanitizeForTerminal } from '../../core/utils/terminal.js';
 import type { Theme } from '../theme.js';
 import { getTheme } from '../theme.js';
 
@@ -82,7 +83,9 @@ export class SearchInputBar extends BoxRenderable {
   private refresh(): void {
     const active = selectors.searchActive;
     this.visible = active;
-    this.input.content = active ? selectors.searchQuery : '';
+    // The query is user-entered text (possibly pasted): strip control
+    // bytes at the render boundary so they cannot alter terminal output.
+    this.input.content = active ? sanitizeForTerminal(selectors.searchQuery) : '';
   }
 
   setTheme(theme: Theme): void {
