@@ -2,11 +2,18 @@
  * ConfigStore tests
  */
 
-import { existsSync, mkdirSync, rmSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
+import { getDefaultConfig } from '../../src/core/config/defaults.js';
+
+const isPosix = process.platform !== 'win32';
+// Strict mode assertions only run where POSIX bits are honored; on
+// Windows they are skipped (not failed) to avoid brittle ACL checks.
+const itPosix = isPosix ? it : it.skip;
+const modeOf = (p: string): number => statSync(p).mode & 0o777;
 import type { AppConfig } from '../../src/core/types/config.js';
 import { DEFAULT_AI_CONFIG } from '../../src/core/types/config.js';
 
@@ -150,5 +157,48 @@ describe('ConfigStore', () => {
     await configStore.removeAccount('acc1');
     const config = configStore.getConfig();
     expect(config.accounts).toHaveLength(0);
+  });
+
+  describe('file permissions', () => {
+    let nestedRoot: string | null = null;
+
+    afterEach(() => {
+      if (nestedRoot && existsSync(nestedRoot)) {
+        rmSync(nestedRoot, { recursive: true, force: true });
+      }
+      nestedRoot = null;
+    });
+
+    itPosix('creates the config file with owner-only permissions', async () => {
+      await configStore.initialize();
+      expect(modeOf(testConfigPath)).toBe(0o600);
+    });
+
+    itPosix('creates the config directory with owner-only permissions', async () => {
+      nestedRoot = join(tmpdir(), `termail-perm-${Date.now()}-${Math.random()}`);
+      const nestedConfig = join(nestedRoot, 'nested', 'config.json');
+      resetConfigStore();
+      const store = getConfigStore(nestedConfig);
+      await store.initialize();
+      // Only the Termail-created leaf is asserted; shared parents (tmpdir) are untouched.
+      expect(modeOf(dirname(nestedConfig))).toBe(0o700);
+      expect(modeOf(nestedConfig)).toBe(0o600);
+    });
+
+    itPosix('hardens a pre-existing world-readable config file', async () => {
+      writeFileSync(testConfigPath, JSON.stringify(getDefaultConfig()), 'utf-8');
+      chmodSync(testConfigPath, 0o644);
+      expect(modeOf(testConfigPath)).toBe(0o644);
+
+      const loaded = await configStore.initialize();
+      expect(modeOf(testConfigPath)).toBe(0o600);
+      expect(loaded.version).toBe(1);
+    });
+
+    it('initializes regardless of platform permission support', async () => {
+      const config = await configStore.initialize();
+      expect(config.version).toBe(1);
+      expect(existsSync(testConfigPath)).toBe(true);
+    });
   });
 });
