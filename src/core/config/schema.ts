@@ -39,6 +39,10 @@ export const uiConfigSchema = z.object({
  * Passwords / OAuth tokens are NEVER stored in the config file. The
  * `ImapService` / `SmtpService` resolve them from environment variables at
  * connect time.
+ *
+ * Cleartext authentication requires an explicit opt-in: `useTls: false`
+ * without `allowInsecureAuth: true` is accepted by the schema but refused
+ * at connect time, so credentials are never sent unencrypted silently.
  */
 export const accountConfigSchema = z
   .object({
@@ -50,6 +54,7 @@ export const accountConfigSchema = z
     port: z.number().int().positive().max(65535).optional(),
     username: z.string().min(1).optional(),
     useTls: z.boolean().default(true),
+    allowInsecureAuth: z.boolean().default(false),
     authType: z.enum(['password', 'oauth2']).default('password'),
     smtpHost: z.string().min(1).optional(),
     smtpPort: z.number().int().min(1).max(65535).optional(),

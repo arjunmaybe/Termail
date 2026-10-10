@@ -54,6 +54,17 @@ export interface AccountConfig {
   port: number;
   username?: string;
   useTls: boolean;
+  /**
+   * Explicit opt-in permitting plaintext IMAP authentication fallback
+   * when `useTls` is false. Absent/false by default: without this flag,
+   * `ImapService` refuses to authenticate unless the connection is
+   * encrypted (direct TLS, or STARTTLS where the library upgrades).
+   * With the flag, STARTTLS is still attempted opportunistically, but
+   * authentication may proceed unencrypted if STARTTLS is unavailable or
+   * downgraded. The password / OAuth token is never sent in cleartext
+   * silently.
+   */
+  allowInsecureAuth?: boolean;
   authType: 'password' | 'oauth2';
   // SMTP settings (Phase 4). All optional for backward compatibility.
   // `smtpMode` is explicit and is NEVER inferred from IMAP `useTls`.
