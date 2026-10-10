@@ -3,12 +3,12 @@
  */
 
 import { Database as BunDatabase, type SQLQueryBindings, type Statement } from 'bun:sqlite';
-import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { getDatabasePath } from '../types/config.js';
 import type { AppConfig } from '../types/config.js';
 import { DatabaseError } from '../utils/errors.js';
+import { ensureTermailDataDirSync, hardenDatabaseFiles } from '../utils/filePermissions.js';
 import { logger } from '../utils/logger.js';
 import { getCurrentVersion, runMigrations } from './migrations.js';
 
@@ -35,9 +35,20 @@ export class Database {
     try {
       await this.ensureDatabaseDir();
       this.db = new BunDatabase(this.dbPath);
+      // bun:sqlite creates the file with default permissions; harden it
+      // immediately. Failures throw (fail closed) rather than continuing
+      // with a world-readable database. A `0700` directory bounds exposure
+      // only for Termail-managed/newly created paths; pre-existing custom
+      // directories are deliberately left untouched, so sidecars created
+      // later there inherit the umask (sidecars present now are hardened
+      // individually below).
+      hardenDatabaseFiles(this.dbPath);
       this.initialized = true; // mark initialized before internal calls
       this.configurePragmas();
       runMigrations(this.db);
+      // Re-harden: migration writes can create -wal/-shm sidecars after
+      // the first call. Only permission bits are touched.
+      hardenDatabaseFiles(this.dbPath);
       logger.info('Database initialized', {
         path: this.dbPath,
         version: getCurrentVersion(this.db),
@@ -133,13 +144,14 @@ export class Database {
   }
 
   /**
-   * Ensure database directory exists
+   * Ensure database directory exists. New directories are created `0700`;
+   * a pre-existing leaf is additionally hardened to `0700` only when it
+   * is a dedicated Termail data directory (arbitrary custom-path parents
+   * are never rechmodded; see filePermissions). Permission failures on
+   * the dedicated directory throw and abort initialization.
    */
   private async ensureDatabaseDir(): Promise<void> {
-    const dir = dirname(this.dbPath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
+    ensureTermailDataDirSync(dirname(this.dbPath));
   }
 }
 

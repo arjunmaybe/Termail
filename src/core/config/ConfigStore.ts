@@ -2,11 +2,12 @@
  * Configuration store - handles loading/saving JSON config with Zod validation
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { AppConfig, DeepPartial } from '../types/config.js';
 import { ConfigError } from '../utils/errors.js';
+import { ensureTermailDataDirSync, restrictFilePermissions, writePrivateFileSync } from '../utils/filePermissions.js';
 import { logger } from '../utils/logger.js';
 import { getConfigPath, getDefaultConfig, mergeWithDefaults } from './defaults.js';
 import { validateConfig, validateConfigSafe } from './schema.js';
@@ -120,6 +121,11 @@ export class ConfigStore {
       return defaultConfig;
     }
 
+    // Owner-only retrofit for pre-existing files (creation mode covers new
+    // files only). Failures throw (fail closed) with path only and abort
+    // initialization rather than continuing world-readable.
+    restrictFilePermissions(this.configPath);
+
     try {
       const content = readFileSync(this.configPath, 'utf-8');
       const parsed = JSON.parse(content);
@@ -147,17 +153,18 @@ export class ConfigStore {
   private async save(config: AppConfig): Promise<void> {
     await this.ensureConfigDir();
     const content = JSON.stringify(config, null, 2);
-    writeFileSync(this.configPath, content, 'utf-8');
+    writePrivateFileSync(this.configPath, content);
   }
 
   /**
-   * Ensure config directory exists
+   * Ensure config directory exists. New directories are created `0700`;
+   * a pre-existing leaf is additionally hardened to `0700` only when it
+   * is a dedicated Termail data directory (shared/custom parents are
+   * never rechmodded; see filePermissions). Permission failures on the
+   * dedicated directory throw and abort initialization.
    */
   private async ensureConfigDir(): Promise<void> {
-    const dir = dirname(this.configPath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
+    ensureTermailDataDirSync(dirname(this.configPath));
   }
 }
 
