@@ -11,7 +11,7 @@
  * unread count.
  */
 
-import { type CliRenderer } from '@opentui/core';
+import type { CliRenderer } from '@opentui/core';
 import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FolderTabs } from '../../src/app/components/FolderTabs.js';

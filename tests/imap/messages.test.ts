@@ -6,14 +6,13 @@
  * same fake factory used in Phase 2.1/2.2.
  */
 
+import type { FetchMessageObject, ImapFlow } from 'imapflow';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ImapFlow, type FetchMessageObject } from 'imapflow';
-import type { AccountConfig } from '../../src/core/types/config.js';
-import { NetworkError } from '../../src/core/utils/errors.js';
+import { ImapService } from '../../src/core/imap/ImapService.js';
 import {
-  ImapService,
-} from '../../src/core/imap/ImapService.js';
-import {
+  DEFAULT_BATCH_SIZE,
+  DEFAULT_MAX_MESSAGES,
+  DEFAULT_MAX_SOURCE_BYTES,
   buildFetchQuery,
   buildFetchRange,
   dedupeMessages,
@@ -28,11 +27,10 @@ import {
   planBatches,
   resolveLimits,
   sortNewestFirst,
-  DEFAULT_BATCH_SIZE,
-  DEFAULT_MAX_MESSAGES,
-  DEFAULT_MAX_SOURCE_BYTES,
 } from '../../src/core/imap/messages.js';
 import type { ImapFlowFactory, SyncMessage } from '../../src/core/imap/types.js';
+import type { AccountConfig } from '../../src/core/types/config.js';
+import { NetworkError } from '../../src/core/utils/errors.js';
 
 const baseAccount: AccountConfig = {
   id: 'work',
@@ -58,9 +56,9 @@ describe('parseEnvelopeAddresses', () => {
   });
 
   it('maps a single address with name and address', () => {
-    expect(
-      parseEnvelopeAddresses([{ name: 'Alice', address: 'alice@example.com' }])
-    ).toEqual([{ name: 'Alice', address: 'alice@example.com' }]);
+    expect(parseEnvelopeAddresses([{ name: 'Alice', address: 'alice@example.com' }])).toEqual([
+      { name: 'Alice', address: 'alice@example.com' },
+    ]);
   });
 
   it('maps multiple addresses', () => {
@@ -79,9 +77,7 @@ describe('parseEnvelopeAddresses', () => {
   });
 
   it('handles missing address', () => {
-    expect(parseEnvelopeAddresses([{ name: 'Alice' }])).toEqual([
-      { name: 'Alice', address: '' },
-    ]);
+    expect(parseEnvelopeAddresses([{ name: 'Alice' }])).toEqual([{ name: 'Alice', address: '' }]);
   });
 
   it('drops entries that have neither name nor address', () => {
@@ -203,8 +199,7 @@ describe('mapAttachment', () => {
 
   it('classifies inline disposition', () => {
     expect(
-      mapAttachment({ contentDisposition: 'inline', contentType: 'image/png' })
-        .disposition
+      mapAttachment({ contentDisposition: 'inline', contentType: 'image/png' }).disposition
     ).toBe('inline');
   });
 });
@@ -285,21 +280,17 @@ describe('buildFetchRange', () => {
 
 describe('planBatches', () => {
   it('returns [] when there are no UIDs to fetch', () => {
-    expect(
-      planBatches({ upperUid: 0, sinceUid: 0, batchSize: 10, maxMessages: 100 })
-    ).toEqual([]);
+    expect(planBatches({ upperUid: 0, sinceUid: 0, batchSize: 10, maxMessages: 100 })).toEqual([]);
   });
 
   it('returns a single batch when the count fits', () => {
-    expect(
-      planBatches({ upperUid: 5, sinceUid: 0, batchSize: 10, maxMessages: 100 })
-    ).toEqual([{ from: 1, to: 5 }]);
+    expect(planBatches({ upperUid: 5, sinceUid: 0, batchSize: 10, maxMessages: 100 })).toEqual([
+      { from: 1, to: 5 },
+    ]);
   });
 
   it('splits into multiple batches', () => {
-    expect(
-      planBatches({ upperUid: 25, sinceUid: 0, batchSize: 10, maxMessages: 100 })
-    ).toEqual([
+    expect(planBatches({ upperUid: 25, sinceUid: 0, batchSize: 10, maxMessages: 100 })).toEqual([
       { from: 1, to: 10 },
       { from: 11, to: 20 },
       { from: 21, to: 25 },
@@ -307,18 +298,16 @@ describe('planBatches', () => {
   });
 
   it('honors maxMessages', () => {
-    expect(
-      planBatches({ upperUid: 100, sinceUid: 0, batchSize: 10, maxMessages: 15 })
-    ).toEqual([
+    expect(planBatches({ upperUid: 100, sinceUid: 0, batchSize: 10, maxMessages: 15 })).toEqual([
       { from: 1, to: 10 },
       { from: 11, to: 15 },
     ]);
   });
 
   it('respects sinceUid as a lower bound', () => {
-    expect(
-      planBatches({ upperUid: 20, sinceUid: 10, batchSize: 10, maxMessages: 100 })
-    ).toEqual([{ from: 11, to: 20 }]);
+    expect(planBatches({ upperUid: 20, sinceUid: 10, batchSize: 10, maxMessages: 100 })).toEqual([
+      { from: 11, to: 20 },
+    ]);
   });
 });
 
@@ -645,9 +634,7 @@ describe('ImapService.syncMessages', () => {
       uidValidity: 1n,
       exists: 10,
     });
-    fake.fetchAll.mockResolvedValueOnce(
-      [1, 2, 3].map((u) => makeRawFetchedMessage(u, `s${u}`))
-    );
+    fake.fetchAll.mockResolvedValueOnce([1, 2, 3].map((u) => makeRawFetchedMessage(u, `s${u}`)));
     const result = await service.syncMessages('INBOX', {
       limits: { maxMessages: 3, batchSize: 10 },
     });
@@ -665,14 +652,8 @@ describe('ImapService.syncMessages', () => {
     });
     // 4 UIDs at batchSize 2 yields exactly 2 batches: 1:2 and 3:4.
     fake.fetchAll
-      .mockResolvedValueOnce([
-        makeRawFetchedMessage(1, 'a'),
-        makeRawFetchedMessage(2, 'b'),
-      ])
-      .mockResolvedValueOnce([
-        makeRawFetchedMessage(3, 'c'),
-        makeRawFetchedMessage(4, 'd'),
-      ]);
+      .mockResolvedValueOnce([makeRawFetchedMessage(1, 'a'), makeRawFetchedMessage(2, 'b')])
+      .mockResolvedValueOnce([makeRawFetchedMessage(3, 'c'), makeRawFetchedMessage(4, 'd')]);
     const result = await service.syncMessages('INBOX', {
       limits: { batchSize: 2, maxMessages: 10 },
     });
@@ -718,15 +699,11 @@ describe('ImapService.syncMessages', () => {
 
   it('redacts the resolved secret in any thrown error message', async () => {
     await service.connect();
-    fake.mailboxOpen.mockRejectedValueOnce(
-      new Error('auth failed: super-secret is bad')
+    fake.mailboxOpen.mockRejectedValueOnce(new Error('auth failed: super-secret is bad'));
+    const caught: Error = await service.syncMessages('INBOX').then(
+      () => new Error('expected throw'),
+      (e: unknown) => e as Error
     );
-    const caught: Error = await service
-      .syncMessages('INBOX')
-      .then(
-        () => new Error('expected throw'),
-        (e: unknown) => e as Error
-      );
     expect(caught.message).toMatch(/auth failed: \*\*\* is bad/);
     expect(caught.message).not.toContain('super-secret');
   });

@@ -200,9 +200,7 @@ const foldersWithUnread = computed(() => {
 function adjustFolderUnread(folderId: string, delta: number): void {
   if (delta === 0) return;
   _folders.value = _folders.value.map((f) =>
-    f.id === folderId
-      ? { ...f, unreadCount: Math.max(0, (f.unreadCount ?? 0) + delta) }
-      : f
+    f.id === folderId ? { ...f, unreadCount: Math.max(0, (f.unreadCount ?? 0) + delta) } : f
   );
 }
 
@@ -717,5 +715,9 @@ export function subscribe(fn: (state: AppState) => void): () => void {
   // Each signal has a strongly-typed subscribe parameter, but the
   // callback contract here is the generic AppState consumer.
   const unsubscribers = signals.map((s) => s.subscribe(fn as (value: unknown) => void));
-  return () => unsubscribers.forEach((unsub) => unsub());
+  return () => {
+    for (const unsub of unsubscribers) {
+      unsub();
+    }
+  };
 }

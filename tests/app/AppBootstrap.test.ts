@@ -11,11 +11,11 @@ import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SyncOutcome } from '../../src/app/services/SyncService.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import type { PersistedEmail, PersistedFolder } from '../../src/core/database/index.js';
 import { actions, selectors } from '../../src/core/state/AppState.js';
-import type { SyncOutcome } from '../../src/app/services/SyncService.js';
 import type { AccountConfig, AppConfig } from '../../src/core/types/config.js';
 
 function makeAccountConfig(): AccountConfig {
@@ -117,9 +117,11 @@ describe('App.requestSync fresh-account bootstrap', () => {
     syncAccount?: ReturnType<typeof vi.fn>;
   }) {
     const { App } = await import('../../src/app/App.js');
-    const renderer = (await import('@opentui/core/testing').then((m) =>
-      m.createTestRenderer({ width: 120, height: 40 })
-    )).renderer;
+    const renderer = (
+      await import('@opentui/core/testing').then((m) =>
+        m.createTestRenderer({ width: 120, height: 40 })
+      )
+    ).renderer;
     try {
       const app = new App(renderer, {
         id: 'app-boot',
@@ -182,15 +184,12 @@ describe('App.requestSync fresh-account bootstrap', () => {
   });
 
   it('preserves discovered folders when bootstrap message sync fails', async () => {
-    const inbox = makeFolder();
     const fake = {
       syncAccountFolder: vi.fn(),
       // Simulate SyncService.syncAccount persisting INBOX before failing:
       // the fake writes the folder row directly, then returns network.
       syncAccount: vi.fn().mockImplementation(async () => {
-        const { MessageRepository } = await import(
-          '../../src/core/database/MessageRepository.js'
-        );
+        const { MessageRepository } = await import('../../src/core/database/MessageRepository.js');
         const db = getDatabase(getConfigStore().getConfig());
         const repo = new MessageRepository(db);
         repo.ensureAccountRow({

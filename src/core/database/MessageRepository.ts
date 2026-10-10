@@ -30,10 +30,6 @@
  *     credential policy is preserved.
  */
 
-import { Database } from './Database.js';
-import { DatabaseError } from '../utils/errors.js';
-import { logger } from '../utils/logger.js';
-import type { AccountConfig } from '../types/config.js';
 import type { SyncFolder } from '../imap/folders.js';
 import type {
   EmailAddress,
@@ -42,6 +38,10 @@ import type {
   SyncAttachment,
   SyncMessage,
 } from '../imap/types.js';
+import type { AccountConfig } from '../types/config.js';
+import { DatabaseError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
+import type { Database } from './Database.js';
 
 // ---------------------------------------------------------------------------
 // Inputs
@@ -163,11 +163,7 @@ export interface PersistSyncResultOptions {
  * identity `(accountId, folderId, uid)`. Deterministic, non-empty, and
  * stable across re-syncs of the same physical message.
  */
-export function deriveEmailId(
-  accountId: string,
-  folderId: string,
-  uid: number
-): string {
+export function deriveEmailId(accountId: string, folderId: string, uid: number): string {
   return `${accountId}:${folderId}:${uid}`;
 }
 
@@ -183,9 +179,7 @@ export function toEpochSeconds(value: Date | null | undefined): number {
 }
 
 /** Stable JSON for an `EmailAddress[]`. Empty array for empty / undefined. */
-export function serializeAddresses(
-  addrs: ReadonlyArray<EmailAddress> | undefined
-): string {
+export function serializeAddresses(addrs: ReadonlyArray<EmailAddress> | undefined): string {
   if (!addrs || addrs.length === 0) return '[]';
   return JSON.stringify(addrs.map((a) => ({ name: a.name, address: a.address })));
 }
@@ -235,9 +229,7 @@ export function parseAddresses(raw: string | null | undefined): EmailAddress[] {
 }
 
 /** Parse a JSON array of attachments, tolerating malformed input. */
-export function parseAttachments(
-  raw: string | null | undefined
-): SyncAttachment[] {
+export function parseAttachments(raw: string | null | undefined): SyncAttachment[] {
   if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -345,9 +337,7 @@ export class MessageRepository {
   ensureFolderRow(accountId: string, folder: SyncFolder): string {
     const folderId = deriveFolderId(accountId, folder.path);
     this.database.transaction(() => {
-      const parentId = folder.parentPath
-        ? deriveFolderId(accountId, folder.parentPath)
-        : null;
+      const parentId = folder.parentPath ? deriveFolderId(accountId, folder.parentPath) : null;
       let resolvedParentId: string | null = null;
       if (parentId) {
         const existing = this.database
@@ -490,9 +480,9 @@ export class MessageRepository {
         for (const m of messages) {
           const id = deriveEmailId(account.id, folderId, m.uid);
           // Pre-check whether the row exists so we can report counts.
-          const existing = this.database
-            .query('SELECT 1 AS x FROM emails WHERE id = ?')
-            .get(id) as { x: number } | undefined;
+          const existing = this.database.query('SELECT 1 AS x FROM emails WHERE id = ?').get(id) as
+            | { x: number }
+            | undefined;
 
           upsertStmt.run(
             id,
@@ -550,20 +540,12 @@ export class MessageRepository {
    * and `last_error` records the diagnostic. If no sync-state row
    * exists yet, one is created.
    */
-  markSyncPartial(
-    account: SafeAccountInput,
-    folder: SyncFolder,
-    error: string
-  ): void {
+  markSyncPartial(account: SafeAccountInput, folder: SyncFolder, error: string): void {
     this.setStatus(account, folder, 'partial', error);
   }
 
   /** Mark a folder as failed. `highest_uid` is NEVER modified. */
-  markSyncError(
-    account: SafeAccountInput,
-    folder: SyncFolder,
-    error: string
-  ): void {
+  markSyncError(account: SafeAccountInput, folder: SyncFolder, error: string): void {
     this.setStatus(account, folder, 'error', error);
   }
 
@@ -618,11 +600,7 @@ export class MessageRepository {
    * List emails in a folder, newest first by `internal_date` (with
    * `date` as fallback). Optional cap; default 100.
    */
-  listByFolder(
-    accountId: string,
-    folderId: string,
-    limit = 100
-  ): PersistedEmail[] {
+  listByFolder(accountId: string, folderId: string, limit = 100): PersistedEmail[] {
     const rows = this.database
       .query(
         `SELECT id, account_id, folder_id, message_id,
@@ -721,8 +699,7 @@ function rowToEmail(row: Record<string, unknown>): PersistedEmail {
   const getNum = (k: string): number => (typeof row[k] === 'number' ? (row[k] as number) : 0);
   const getNumOrNull = (k: string): number | null =>
     row[k] === null || row[k] === undefined ? null : (row[k] as number);
-  const getStr = (k: string): string =>
-    typeof row[k] === 'string' ? (row[k] as string) : '';
+  const getStr = (k: string): string => (typeof row[k] === 'string' ? (row[k] as string) : '');
   const getStrOrNull = (k: string): string | null =>
     row[k] === null || row[k] === undefined ? null : (row[k] as string);
   const getBool = (k: string): boolean => getNum(k) !== 0;
@@ -780,8 +757,7 @@ function getErrorMessage(error: unknown): string {
 
 /** Map a `folders` row to a typed `PersistedFolder`. */
 function rowToFolder(row: Record<string, unknown>): PersistedFolder {
-  const getStr = (k: string): string =>
-    typeof row[k] === 'string' ? (row[k] as string) : '';
+  const getStr = (k: string): string => (typeof row[k] === 'string' ? (row[k] as string) : '');
   const getStrOrNull = (k: string): string | null =>
     row[k] === null || row[k] === undefined ? null : (row[k] as string);
   const getNum = (k: string): number => (typeof row[k] === 'number' ? (row[k] as number) : 0);
@@ -841,9 +817,7 @@ export function persistSyncResult(
 ): UpsertMessagesResult {
   const status: SyncStatus = options.status ?? 'ok';
   if (status !== 'ok' && !options.error) {
-    throw new DatabaseError(
-      `persistSyncResult: status="${status}" requires options.error`
-    );
+    throw new DatabaseError(`persistSyncResult: status="${status}" requires options.error`);
   }
   const upsert = repo.upsertMessages(account, folder, result.messages);
   if (status === 'partial') {
@@ -861,9 +835,7 @@ export function persistSyncResult(
  * previously recorded `highest_uid`. If there is no recorded state,
  * `undefined` is returned (caller will perform a full sync).
  */
-export function buildImapSyncLimits(
-  state: FolderSyncState | null
-): MessageSyncLimits | undefined {
+export function buildImapSyncLimits(state: FolderSyncState | null): MessageSyncLimits | undefined {
   if (!state) return undefined;
   return { sinceUid: state.highestUid };
 }

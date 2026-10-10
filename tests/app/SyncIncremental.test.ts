@@ -11,7 +11,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SyncService, type ImapServiceFactory } from '../../src/app/services/SyncService.js';
+import { type ImapServiceFactory, SyncService } from '../../src/app/services/SyncService.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import { MessageRepository } from '../../src/core/database/MessageRepository.js';

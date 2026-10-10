@@ -174,8 +174,6 @@ export function formatSyncError(syncError: string | null): string {
   const firstLine = syncError.split('\n')[0]?.trim() ?? '';
   if (firstLine.length === 0) return '● Error';
   const clipped =
-    firstLine.length > MAX_MESSAGE_LENGTH
-      ? firstLine.slice(0, MAX_MESSAGE_LENGTH)
-      : firstLine;
+    firstLine.length > MAX_MESSAGE_LENGTH ? firstLine.slice(0, MAX_MESSAGE_LENGTH) : firstLine;
   return sanitizeForTerminal(`● Error: ${clipped}`);
 }

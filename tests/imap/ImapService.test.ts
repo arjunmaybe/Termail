@@ -6,15 +6,12 @@
  * keeps the tests fast, hermetic, and free of network code paths.
  */
 
+import type { ImapFlow } from 'imapflow';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ImapFlow } from 'imapflow';
+import { ImapService, buildImapOptions } from '../../src/core/imap/ImapService.js';
+import type { ImapFlowFactory } from '../../src/core/imap/types.js';
 import type { AccountConfig } from '../../src/core/types/config.js';
 import { AuthenticationError, NetworkError } from '../../src/core/utils/errors.js';
-import {
-  ImapService,
-  buildImapOptions,
-} from '../../src/core/imap/ImapService.js';
-import type { ImapFlowFactory } from '../../src/core/imap/types.js';
 
 interface FakeImapFlow {
   options: unknown;
@@ -81,17 +78,17 @@ describe('ImapService', () => {
 
       expect(factory.create).toHaveBeenCalledTimes(1);
       const opts = factory.calls[0] as Record<string, unknown>;
-      expect(opts['host']).toBe('imap.example.com');
-      expect(opts['port']).toBe(993);
-      expect(opts['secure']).toBe(true);
-      const auth = opts['auth'] as { user: string; pass: string; accessToken?: string };
+      expect(opts.host).toBe('imap.example.com');
+      expect(opts.port).toBe(993);
+      expect(opts.secure).toBe(true);
+      const auth = opts.auth as { user: string; pass: string; accessToken?: string };
       expect(auth.user).toBe('me@example.com');
       expect(auth.pass).toBe('super-secret');
       expect(auth.accessToken).toBeUndefined();
       // logger: false so imapflow's built-in logger never prints secrets.
-      expect(opts['logger']).toBe(false);
+      expect(opts.logger).toBe(false);
       // TLS hardening stays on by default.
-      expect((opts['tls'] as { rejectUnauthorized: boolean }).rejectUnauthorized).toBe(true);
+      expect((opts.tls as { rejectUnauthorized: boolean }).rejectUnauthorized).toBe(true);
     });
 
     it('marks the service as connected after a successful connect', async () => {
@@ -122,17 +119,14 @@ describe('ImapService', () => {
 
     it('redacts the resolved secret in any thrown error message', async () => {
       fake.connect.mockRejectedValueOnce(new Error('auth failed: super-secret is wrong'));
-      const caught: Error = await service
-        .connect()
-        .then(
-          () => new Error('expected connect to reject'),
-          (e: unknown) => e as Error
-        );
+      const caught: Error = await service.connect().then(
+        () => new Error('expected connect to reject'),
+        (e: unknown) => e as Error
+      );
       expect(caught).toBeInstanceOf(Error);
       expect(caught.message).toMatch(/auth failed: \*\*\* is wrong/);
       expect(caught.message).not.toContain('super-secret');
     });
-
 
     it('throws AuthenticationError when the env var is missing', async () => {
       const noEnvService = new ImapService(baseAccount, { factory, env: {} });
@@ -171,7 +165,13 @@ describe('ImapService', () => {
       ]);
       const folders = await service.listMailboxes();
       expect(folders).toEqual([
-        { path: 'INBOX', name: 'INBOX', delimiter: '/', flags: ['\\Inbox', '\\HasChildren'], specialUse: 'inbox' },
+        {
+          path: 'INBOX',
+          name: 'INBOX',
+          delimiter: '/',
+          flags: ['\\Inbox', '\\HasChildren'],
+          specialUse: 'inbox',
+        },
         { path: 'Sent', name: 'Sent', delimiter: '/', flags: ['\\Sent'], specialUse: 'sent' },
         { path: 'Archive/2024', name: '2024', delimiter: '/', flags: [], specialUse: '' },
       ]);
@@ -197,7 +197,7 @@ describe('ImapService', () => {
       });
       await oauthService.connect();
       const opts = factory.calls[0] as Record<string, unknown>;
-      const auth = opts['auth'] as { accessToken?: string; pass?: string };
+      const auth = opts.auth as { accessToken?: string; pass?: string };
       expect(auth.accessToken).toBe('tok-123');
       expect(auth.pass).toBeUndefined();
     });

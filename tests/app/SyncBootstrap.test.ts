@@ -10,7 +10,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SyncService, type ImapServiceFactory } from '../../src/app/services/SyncService.js';
+import { type ImapServiceFactory, SyncService } from '../../src/app/services/SyncService.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import { MessageRepository } from '../../src/core/database/MessageRepository.js';
@@ -121,7 +121,12 @@ describe('SyncService.syncAccount bootstrap', () => {
   it('discovers folders, prefers INBOX, persists messages and checkpoint', async () => {
     const db = getDatabase(getConfigStore().getConfig());
     const service = new SyncService(db, makeFactory(fake));
-    const sent = makeFolder({ path: 'Sent', displayName: 'Sent', type: 'sent', specialUse: 'sent' });
+    const sent = makeFolder({
+      path: 'Sent',
+      displayName: 'Sent',
+      type: 'sent',
+      specialUse: 'sent',
+    });
     fake.syncFolders.mockResolvedValue({
       folders: [sent, makeFolder()],
       total: 2,
@@ -230,7 +235,9 @@ describe('SyncService.syncAccount bootstrap', () => {
     const db = getDatabase(getConfigStore().getConfig());
     const service = new SyncService(db, makeFactory(fake));
     fake.syncFolders.mockResolvedValue({
-      folders: [makeFolder({ path: 'Parent', displayName: 'Parent', type: 'custom', selectable: false })],
+      folders: [
+        makeFolder({ path: 'Parent', displayName: 'Parent', type: 'custom', selectable: false }),
+      ],
       total: 1,
       skipped: 0,
     } satisfies FolderSyncResult);

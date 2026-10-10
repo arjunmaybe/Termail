@@ -6,10 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  NodeSmtpTransport,
-  type LineSocket,
-} from '../../src/core/smtp/transport.js';
+import { type LineSocket, NodeSmtpTransport } from '../../src/core/smtp/transport.js';
 
 type DataListener = (chunk: any) => void;
 
@@ -52,8 +49,13 @@ class FakeSocket implements LineSocket {
     return this;
   }
   removeListener(event: string, listener: (...args: any[]) => void): unknown {
-    if (event === 'data') this.dataListeners = this.dataListeners.filter((l) => l !== (listener as DataListener));
-    else this.onceListeners.set(event, (this.onceListeners.get(event) ?? []).filter((l) => l !== listener));
+    if (event === 'data')
+      this.dataListeners = this.dataListeners.filter((l) => l !== (listener as DataListener));
+    else
+      this.onceListeners.set(
+        event,
+        (this.onceListeners.get(event) ?? []).filter((l) => l !== listener)
+      );
     return this;
   }
   serverPush(chunk: string): void {

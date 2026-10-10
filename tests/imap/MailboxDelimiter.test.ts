@@ -47,9 +47,9 @@ describe('B4 normalizeMailbox delimiter', () => {
 
   it('treats empty/missing delimiters as a single top-level name', () => {
     expect(normalizeMailbox({ path: 'INBOX', delimiter: '', flags: new Set() }).name).toBe('INBOX');
-    expect(
-      normalizeMailbox({ path: 'INBOX.Archive', delimiter: '', flags: new Set() }).name
-    ).toBe('INBOX.Archive');
+    expect(normalizeMailbox({ path: 'INBOX.Archive', delimiter: '', flags: new Set() }).name).toBe(
+      'INBOX.Archive'
+    );
     expect(
       normalizeMailbox({
         path: 'INBOX',

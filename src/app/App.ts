@@ -3,10 +3,12 @@
  */
 
 import { BoxRenderable, type RenderContext, TextRenderable } from '@opentui/core';
+import { AiService } from '../core/ai/AiService.js';
 import { getConfigStore } from '../core/config/ConfigStore.js';
 import { getDatabase } from '../core/database/Database.js';
 import { MessageRepository } from '../core/database/MessageRepository.js';
 import type { PersistedEmail, PersistedFolder } from '../core/database/index.js';
+import { SmtpService } from '../core/smtp/SmtpService.js';
 import { actions, selectors, subscribe } from '../core/state/AppState.js';
 import type { AccountConfig } from '../core/types/config.js';
 import type { Account, Folder } from '../core/types/index.js';
@@ -17,11 +19,9 @@ import { SearchInputBar } from './components/SearchInputBar.js';
 import { ContentPane } from './layout/ContentPane.js';
 import { Sidebar } from './layout/Sidebar.js';
 import { StatusBar } from './layout/StatusBar.js';
-import { SearchController } from './services/SearchController.js';
-import { ComposeController } from './services/ComposeController.js';
 import { AiController } from './services/AiController.js';
-import { SmtpService } from '../core/smtp/SmtpService.js';
-import { AiService } from '../core/ai/AiService.js';
+import { ComposeController } from './services/ComposeController.js';
+import { SearchController } from './services/SearchController.js';
 import { type SyncOutcome, SyncService } from './services/SyncService.js';
 import { type Theme, getTheme } from './theme.js';
 
@@ -307,8 +307,7 @@ export class App extends BoxRenderable {
     }
 
     const accountStillRelevant = selectors.currentAccountId === requestAccountId;
-    const stillRelevant =
-      accountStillRelevant && selectors.currentFolderId === requestFolderId;
+    const stillRelevant = accountStillRelevant && selectors.currentFolderId === requestFolderId;
 
     switch (outcome.kind) {
       case 'ok': {
@@ -459,9 +458,7 @@ export class App extends BoxRenderable {
    * No-op when the visible list is empty.
    */
   moveEmailSelection(delta: 1 | -1): void {
-    const visible = selectors.searchActive
-      ? (selectors.searchHits ?? [])
-      : selectors.emails;
+    const visible = selectors.searchActive ? (selectors.searchHits ?? []) : selectors.emails;
     if (visible.length === 0) return;
     const currentId = selectors.selectedEmailId;
     if (!currentId) {
@@ -682,9 +679,7 @@ export class App extends BoxRenderable {
     this.composeController?.openCompose();
     this.composeController?.setTo(sender !== undefined ? [sender] : []);
     const subject = email.subject;
-    this.composeController?.setSubject(
-      /^re:/i.test(subject) ? subject : `Re: ${subject}`
-    );
+    this.composeController?.setSubject(/^re:/i.test(subject) ? subject : `Re: ${subject}`);
     this.composeController?.setBody(outcome.text);
   }
 

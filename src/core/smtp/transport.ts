@@ -26,16 +26,21 @@ import { DEFAULT_SMTP_TIMEOUTS } from './types.js';
 export interface LineSocket {
   write(data: string): unknown;
   end(data?: string): unknown;
-  destroy(...args: any[]): unknown;
-  once(event: string, listener: (...args: any[]) => void): unknown;
-  on(event: string, listener: (...args: any[]) => void): unknown;
-  removeListener(event: string, listener: (...args: any[]) => void): unknown;
+  destroy(error?: Error): unknown;
+  once(event: string, listener: (...args: unknown[]) => void): unknown;
+  on(event: string, listener: (...args: unknown[]) => void): unknown;
+  removeListener(event: string, listener: (...args: unknown[]) => void): unknown;
 }
 
 export interface SmtpTransportHooks {
   connectTcp(host: string, port: number, timeoutMs: number): Promise<LineSocket>;
   connectTls(host: string, port: number, timeoutMs: number): Promise<LineSocket>;
-  upgradeTls(socket: LineSocket, host: string, port: number, timeoutMs: number): Promise<LineSocket>;
+  upgradeTls(
+    socket: LineSocket,
+    host: string,
+    port: number,
+    timeoutMs: number
+  ): Promise<LineSocket>;
 }
 
 export interface NodeSmtpTransportOptions {
@@ -183,7 +188,7 @@ const defaultHooks: SmtpTransportHooks = {
 /** Parse complete replies out of a CRLF buffer. Returns reply + remaining. */
 export function parseSmtpBuffer(buffer: string): { reply: SmtpReply | null; rest: string } {
   const lines: string[] = [];
-  let rest = buffer;
+  const rest = buffer;
   let cursor = 0;
   for (;;) {
     const idx = rest.indexOf('\r\n', cursor);
@@ -198,7 +203,10 @@ export function parseSmtpBuffer(buffer: string): { reply: SmtpReply | null; rest
     lines.push(line);
     if (/^\d{3} /.test(line)) {
       const code = Number.parseInt(line.slice(0, 3), 10);
-      return { reply: { code, lines: [...lines], text: lines.join('\n') }, rest: rest.slice(idx + 2) };
+      return {
+        reply: { code, lines: [...lines], text: lines.join('\n') },
+        rest: rest.slice(idx + 2),
+      };
     }
     cursor = idx + 2;
   }
@@ -285,7 +293,11 @@ function readReply(session: Session, timeoutMs: number): Promise<SmtpReply> {
     };
     const onError = (err: unknown): void => {
       cleanup();
-      reject(new NetworkError(`SMTP connection error: ${redactSecret(getErrorMessage(err), session.secret)}`));
+      reject(
+        new NetworkError(
+          `SMTP connection error: ${redactSecret(getErrorMessage(err), session.secret)}`
+        )
+      );
     };
     const onClose = (): void => {
       cleanup();
@@ -393,7 +405,12 @@ export class NodeSmtpTransport {
           this.port,
           this.timeouts.connectionTimeoutMs
         );
-        const plainSession: Session = { socket: plain, buffer: '', closed: false, secret: this.secret };
+        const plainSession: Session = {
+          socket: plain,
+          buffer: '',
+          closed: false,
+          secret: this.secret,
+        };
         try {
           await this.runStarttlsHandshake(plainSession);
         } catch (error) {
@@ -438,13 +455,19 @@ export class NodeSmtpTransport {
   private async runStarttlsHandshake(session: Session): Promise<void> {
     const greeting = await readReply(session, this.timeouts.greetingTimeoutMs);
     if (greeting.code !== 220) {
-      throw mapSmtpError(greeting.code, `SMTP greeting failed with code ${greeting.code}`, this.secret);
+      throw mapSmtpError(
+        greeting.code,
+        `SMTP greeting failed with code ${greeting.code}`,
+        this.secret
+      );
     }
     const ehlo = await sendCommand(session, 'EHLO termail', this.timeouts.commandTimeoutMs);
     expectCode(ehlo, [250], 'SMTP EHLO', this.secret);
     const caps = parseCapabilities(ehlo);
     if (!caps.starttls) {
-      throw new NetworkError('SMTP server does not advertise STARTTLS; refusing to send without TLS');
+      throw new NetworkError(
+        'SMTP server does not advertise STARTTLS; refusing to send without TLS'
+      );
     }
     const tlsReply = await sendCommand(session, 'STARTTLS', this.timeouts.commandTimeoutMs);
     expectCode(tlsReply, [220], 'SMTP STARTTLS', this.secret);
@@ -533,24 +556,40 @@ export class NodeSmtpTransport {
         this.timeouts.commandTimeoutMs
       );
       if (reply.code !== 235) {
-        throw mapSmtpError(reply.code, `SMTP AUTH PLAIN failed with code ${reply.code}`, this.secret);
+        throw mapSmtpError(
+          reply.code,
+          `SMTP AUTH PLAIN failed with code ${reply.code}`,
+          this.secret
+        );
       }
       return;
     }
     if (upper.has('LOGIN')) {
       const step1 = await sendCommand(session, 'AUTH LOGIN', this.timeouts.commandTimeoutMs);
       if (step1.code !== 334) {
-        throw mapSmtpError(step1.code, `SMTP AUTH LOGIN failed with code ${step1.code}`, this.secret);
+        throw mapSmtpError(
+          step1.code,
+          `SMTP AUTH LOGIN failed with code ${step1.code}`,
+          this.secret
+        );
       }
       const userB64 = Buffer.from(this.user, 'utf8').toString('base64');
       const step2 = await sendCommand(session, userB64, this.timeouts.commandTimeoutMs);
       if (step2.code !== 334) {
-        throw mapSmtpError(step2.code, `SMTP AUTH LOGIN failed with code ${step2.code}`, this.secret);
+        throw mapSmtpError(
+          step2.code,
+          `SMTP AUTH LOGIN failed with code ${step2.code}`,
+          this.secret
+        );
       }
       const passB64 = Buffer.from(this.secret, 'utf8').toString('base64');
       const step3 = await sendCommand(session, passB64, this.timeouts.commandTimeoutMs);
       if (step3.code !== 235) {
-        throw mapSmtpError(step3.code, `SMTP AUTH LOGIN failed with code ${step3.code}`, this.secret);
+        throw mapSmtpError(
+          step3.code,
+          `SMTP AUTH LOGIN failed with code ${step3.code}`,
+          this.secret
+        );
       }
       return;
     }

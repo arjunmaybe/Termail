@@ -36,8 +36,7 @@ const migrations: Migration[] = [
   },
   {
     version: 2,
-    description:
-      'Add IMAP synchronization identity (uid) and per-folder sync state',
+    description: 'Add IMAP synchronization identity (uid) and per-folder sync state',
     up: (db: Database) => {
       db.exec(MIGRATION_V2_UP_SQL);
     },

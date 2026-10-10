@@ -145,15 +145,14 @@ export class OpenRouterTransport implements AiProvider {
         let preview = '';
         try {
           preview = (await response.text()).slice(0, 300);
-        } catch (error) {
+        } catch {
           if (controller.signal.aborted) {
             throw new NetworkError(`AI request timed out after ${this.timeoutMs}ms`);
           }
           preview = '';
         }
         throw new NetworkError(
-          `AI request failed with status ${response.status}` +
-            (preview ? `: ${redactKey(preview, this.apiKey)}` : '')
+          `AI request failed with status ${response.status}${preview ? `: ${redactKey(preview, this.apiKey)}` : ''}`
         );
       }
 

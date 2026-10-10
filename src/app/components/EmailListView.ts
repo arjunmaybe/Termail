@@ -6,8 +6,8 @@
  */
 
 import { BoxRenderable, type RenderContext, TextAttributes, TextRenderable } from '@opentui/core';
-import { actions, selectors, subscribe } from '../../core/state/AppState.js';
 import type { PersistedEmail } from '../../core/database/index.js';
+import { actions, selectors, subscribe } from '../../core/state/AppState.js';
 import { sanitizeForTerminal } from '../../core/utils/terminal.js';
 import type { Theme } from '../theme.js';
 import { getTheme } from '../theme.js';

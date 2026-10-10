@@ -5,16 +5,14 @@
  * the StatusBar (first line, length-limited, fallback to generic).
  */
 
-import { type CliRenderer } from '@opentui/core';
+import type { CliRenderer } from '@opentui/core';
 import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { StatusBar, formatSyncError } from '../../src/app/layout/StatusBar.js';
 import { actions } from '../../src/core/state/AppState.js';
 
 function syncContent(bar: StatusBar): string | null {
-  const right = bar
-    .getChildren()
-    .find((c) => (c as { id?: string }).id === 'status-right') as
+  const right = bar.getChildren().find((c) => (c as { id?: string }).id === 'status-right') as
     | { getChildren: () => Array<{ id?: string; content?: { chunks?: Array<{ text?: string }> } }> }
     | undefined;
   if (!right) return null;
@@ -68,11 +66,11 @@ describe('B1 StatusBar sync error visibility', () => {
     renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
     const bar = new StatusBar(renderer, { themeMode: 'dark' });
     try {
-      actions.setSyncError(`first line here\nsecond line here\nthird`);
+      actions.setSyncError('first line here\nsecond line here\nthird');
       expect(syncContent(bar)).toContain('first line here');
       expect(syncContent(bar)).not.toContain('second line');
 
-      const long = `x`.repeat(200);
+      const long = 'x'.repeat(200);
       actions.setSyncError(long);
       const clipped = syncContent(bar)!;
       expect(clipped.length).toBeLessThanOrEqual('● Error: '.length + 80);

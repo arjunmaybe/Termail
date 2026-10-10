@@ -14,13 +14,13 @@
  * Fake `ImapFlow` objects only — no network, dummy secrets only.
  */
 
+import type { ImapFlow } from 'imapflow';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ImapFlow } from 'imapflow';
-import type { AccountConfig } from '../../src/core/types/config.js';
 import { accountConfigSchema } from '../../src/core/config/schema.js';
-import { AuthenticationError } from '../../src/core/utils/errors.js';
 import { ImapService, buildImapOptions } from '../../src/core/imap/ImapService.js';
 import type { ImapFlowFactory } from '../../src/core/imap/types.js';
+import type { AccountConfig } from '../../src/core/types/config.js';
+import { AuthenticationError } from '../../src/core/utils/errors.js';
 
 const SECRET = 'super-secret-password-xyz';
 const TOKEN = 'oauth-token-abc-123';
@@ -174,9 +174,7 @@ describe('insecure IMAP authentication opt-in', () => {
       expect(factory.create).toHaveBeenCalledTimes(1);
       expect(service.isConnected()).toBe(true);
 
-      const logged = warnSpy.mock.calls
-        .map((args: Array<unknown>) => args.join(' '))
-        .join('\n');
+      const logged = warnSpy.mock.calls.map((args: Array<unknown>) => args.join(' ')).join('\n');
       expect(warnSpy).toHaveBeenCalled();
       expect(logged).toContain(plainAccount.id);
       expect(logged).not.toContain(SECRET);

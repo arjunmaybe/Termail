@@ -18,20 +18,15 @@
  *   - OAuth token refresh.
  */
 
-import { simpleParser, type MailparserAttachment } from 'mailparser';
 import type {
   FetchMessageObject,
   FetchQueryObject,
   MessageAddressObject,
   MessageEnvelopeObject,
 } from 'imapflow';
+import { type MailparserAttachment, simpleParser } from 'mailparser';
 import { logger } from '../utils/logger.js';
-import type {
-  EmailAddress,
-  MessageSyncLimits,
-  SyncAttachment,
-  SyncMessage,
-} from './types.js';
+import type { EmailAddress, MessageSyncLimits, SyncAttachment, SyncMessage } from './types.js';
 
 /** Default cap on messages returned per sync. */
 export const DEFAULT_MAX_MESSAGES = 500;
@@ -41,7 +36,9 @@ export const DEFAULT_BATCH_SIZE = 100;
 export const DEFAULT_MAX_SOURCE_BYTES = 25 * 1024 * 1024;
 
 /** Build the FETCH query used to pull envelope + structure + raw bytes. */
-export function buildFetchQuery(maxSourceBytes: number = DEFAULT_MAX_SOURCE_BYTES): FetchQueryObject {
+export function buildFetchQuery(
+  maxSourceBytes: number = DEFAULT_MAX_SOURCE_BYTES
+): FetchQueryObject {
   return {
     uid: true,
     flags: true,

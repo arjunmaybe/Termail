@@ -8,10 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  OpenRouterTransport,
-  type FetchFn,
-} from '../../src/core/ai/OpenRouterTransport.js';
+import { type FetchFn, OpenRouterTransport } from '../../src/core/ai/OpenRouterTransport.js';
 import { NetworkError } from '../../src/core/utils/errors.js';
 
 const DUMMY_KEY = 'test-ai-key-123';

@@ -190,7 +190,7 @@ export class ImapService {
     }
     const client = this.requireClient();
     const secret = this.lastCredentials?.secret ?? '';
-    let raw;
+    let raw: Awaited<ReturnType<typeof client.list>>;
     try {
       raw = await client.list();
     } catch (error) {
@@ -232,7 +232,7 @@ export class ImapService {
     }
     const client = this.requireClient();
     const secret = this.lastCredentials?.secret ?? '';
-    let raw;
+    let raw: Awaited<ReturnType<typeof client.list>>;
     try {
       raw = await client.list();
     } catch (error) {
@@ -271,7 +271,7 @@ export class ImapService {
     const accountId = this.account.id;
     const limits = resolveLimits(options.limits);
 
-    let mailbox;
+    let mailbox: Awaited<ReturnType<typeof client.mailboxOpen>>;
     try {
       mailbox = await client.mailboxOpen(folderPath, { readOnly: true });
     } catch (error) {
@@ -369,10 +369,7 @@ export function buildImapOptions(
 
   if (!account.useTls && account.allowInsecureAuth !== true) {
     throw new AuthenticationError(
-      `Account "${account.id}" disables TLS (useTls: false) without opting into insecure authentication. ` +
-        `Refusing to send the password or OAuth token over an unencrypted IMAP connection. ` +
-        `Set "allowInsecureAuth": true for this account to permit cleartext authentication, ` +
-        `or re-enable TLS with "useTls": true.`
+      `Account "${account.id}" disables TLS (useTls: false) without opting into insecure authentication. Refusing to send the password or OAuth token over an unencrypted IMAP connection. Set "allowInsecureAuth": true for this account to permit cleartext authentication, or re-enable TLS with "useTls": true.`
     );
   }
 
@@ -436,9 +433,7 @@ function normalizeMailbox(entry: {
   // mean the path is a single top-level name.
   const delimiter = entry.delimiter ?? '';
   const segments =
-    delimiter.length > 0
-      ? entry.path.split(delimiter).filter((s) => s.length > 0)
-      : [entry.path];
+    delimiter.length > 0 ? entry.path.split(delimiter).filter((s) => s.length > 0) : [entry.path];
   const last = segments[segments.length - 1];
   const name = last ?? entry.path;
 

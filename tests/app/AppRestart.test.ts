@@ -110,9 +110,11 @@ async function makeApp(syncService?: SyncService): Promise<{
   renderer: { stop: () => void; destroy: () => void };
 }> {
   const { App } = await import('../../src/app/App.js');
-  const renderer = (await import('@opentui/core/testing').then((m) =>
-    m.createTestRenderer({ width: 120, height: 40 })
-  )).renderer;
+  const renderer = (
+    await import('@opentui/core/testing').then((m) =>
+      m.createTestRenderer({ width: 120, height: 40 })
+    )
+  ).renderer;
   try {
     const app = new App(renderer, {
       id: 'app-restart',

@@ -3,10 +3,10 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { AccountConfig } from '../../src/core/types/config.js';
-import { AuthenticationError, NetworkError } from '../../src/core/utils/errors.js';
 import { SmtpService } from '../../src/core/smtp/SmtpService.js';
 import type { SmtpEnvelope, SmtpTransport } from '../../src/core/smtp/types.js';
+import type { AccountConfig } from '../../src/core/types/config.js';
+import { AuthenticationError, NetworkError } from '../../src/core/utils/errors.js';
 
 const DUMMY_SECRET = 'dummy-password-123';
 
@@ -132,7 +132,9 @@ describe('SmtpService', () => {
     // Builder throws inside the fake transport here; emulate transport-level
     // validation by rejecting with a ValidationError-like shape.
     const { ValidationError } = await import('../../src/core/utils/errors.js');
-    fake.send.mockRejectedValueOnce(new ValidationError('To[0] must not contain CR or LF characters'));
+    fake.send.mockRejectedValueOnce(
+      new ValidationError('To[0] must not contain CR or LF characters')
+    );
     const outcome = await service.sendMail(baseAccount, bad);
     expect(outcome.kind).toBe('validation');
   });

@@ -202,7 +202,7 @@ describe('SearchService', () => {
   });
 
   it('uses the default limit when NaN is requested', () => {
-    const result = service.search({ query: 'budget', limit: NaN });
+    const result = service.search({ query: 'budget', limit: Number.NaN });
     expect(result.limit).toBe(SEARCH_DEFAULT_LIMIT);
   });
 
@@ -265,7 +265,9 @@ describe('SearchService.searchParsed', () => {
         uid: 3,
         subject: 'Receipt for invoice',
         isRead: true,
-        attachments: [{ filename: 'a.txt', contentType: 'text/plain', size: 1, disposition: 'attachment' }],
+        attachments: [
+          { filename: 'a.txt', contentType: 'text/plain', size: 1, disposition: 'attachment' },
+        ],
       }),
     ]);
   });
@@ -333,7 +335,10 @@ describe('SearchService.searchParsed', () => {
   });
 
   it('passes accountId and limit through to the repository', () => {
-    const result = service.searchParsed({ text: '', isRead: true }, { accountId: 'work', limit: 1 });
+    const result = service.searchParsed(
+      { text: '', isRead: true },
+      { accountId: 'work', limit: 1 }
+    );
     expect(result.hits).toHaveLength(1);
     expect(result.limit).toBe(1);
   });

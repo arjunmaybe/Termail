@@ -29,13 +29,13 @@ function controlCodes(text: string): number[] {
 
 describe('sanitizeForTerminal', () => {
   it('removes CSI sequences such as ESC [2J while keeping visible text', () => {
-    const cleaned = sanitizeForTerminal('hello' + ESC + '[2Jworld');
+    const cleaned = sanitizeForTerminal(`hello${ESC}[2Jworld`);
     expect(cleaned).toBe('hello[2Jworld');
     expect(cleaned).not.toContain(ESC);
   });
 
   it('removes OSC window-title sequences', () => {
-    const cleaned = sanitizeForTerminal('INBOX' + ESC + ']0;PWNED' + BEL + ' tail');
+    const cleaned = sanitizeForTerminal(`INBOX${ESC}]0;PWNED${BEL} tail`);
     expect(cleaned).toBe('INBOX]0;PWNED tail');
     expect(cleaned).not.toContain(ESC);
     expect(cleaned).not.toContain(BEL);
@@ -43,7 +43,7 @@ describe('sanitizeForTerminal', () => {
 
   it('removes OSC hyperlink sequences', () => {
     const cleaned = sanitizeForTerminal(
-      'click ' + ESC + ']8;;http://evil.example' + BEL + 'here' + ESC + ']8;;' + BEL
+      `click ${ESC}]8;;http://evil.example${BEL}here${ESC}]8;;${BEL}`
     );
     expect(cleaned).toBe('click ]8;;http://evil.examplehere]8;;');
     expect(cleaned).not.toContain(ESC);
@@ -56,7 +56,7 @@ describe('sanitizeForTerminal', () => {
     const c1low = String.fromCharCode(0x80);
     const c1high = String.fromCharCode(0x9f);
     const cleaned = sanitizeForTerminal(
-      'a' + BEL + 'b' + ESC + 'c' + DEL + 'd' + c1csi + 'e' + c1osc + 'f' + c1low + 'g' + c1high + 'h'
+      `a${BEL}b${ESC}c${DEL}d${c1csi}e${c1osc}f${c1low}g${c1high}h`
     );
     expect(cleaned).toBe('abcdefgh');
   });
@@ -67,21 +67,7 @@ describe('sanitizeForTerminal', () => {
   });
 
   it('leaves no executable terminal control sequence in a combined attack', () => {
-    const attack =
-      'Subject: hi' +
-      ESC +
-      ']0;pwned' +
-      BEL +
-      '\nBody ' +
-      ESC +
-      '[2J' +
-      ESC +
-      ']8;;http://evil.example' +
-      BEL +
-      'x' +
-      String.fromCharCode(0x9b) +
-      '3J' +
-      DEL;
+    const attack = `Subject: hi${ESC}]0;pwned${BEL}\nBody ${ESC}[2J${ESC}]8;;http://evil.example${BEL}x${String.fromCharCode(0x9b)}3J${DEL}`;
     const cleaned = sanitizeForTerminal(attack);
     expect(controlCodes(cleaned)).toEqual([]);
     expect(cleaned).toContain('Subject: hi');

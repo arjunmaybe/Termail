@@ -14,9 +14,9 @@
  * No network, no real IMAP. All data is fabricated in-process.
  */
 
-import { existsSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
@@ -25,7 +25,10 @@ import {
   buildImapSyncLimits,
   persistSyncResult,
 } from '../../src/core/database/MessageRepository.js';
-import type { FolderSyncState, SafeAccountInput } from '../../src/core/database/MessageRepository.js';
+import type {
+  FolderSyncState,
+  SafeAccountInput,
+} from '../../src/core/database/MessageRepository.js';
 import type { SyncFolder } from '../../src/core/imap/folders.js';
 import type {
   EmailAddress,
@@ -120,7 +123,10 @@ function makeMessage(over: Partial<SyncMessage> = {}): SyncMessage {
   };
 }
 
-function makeSyncResult(messages: SyncMessage[], over: Partial<MessageSyncResult> = {}): MessageSyncResult {
+function makeSyncResult(
+  messages: SyncMessage[],
+  over: Partial<MessageSyncResult> = {}
+): MessageSyncResult {
   return {
     folder: 'INBOX',
     total: messages.length,
@@ -161,12 +167,7 @@ describe('MessageRepository', () => {
   afterEach(() => {
     resetDatabase();
     resetConfigStore();
-    for (const p of [
-      testDbPath,
-      `${testDbPath}-wal`,
-      `${testDbPath}-shm`,
-      testConfigPath,
-    ]) {
+    for (const p of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`, testConfigPath]) {
       if (existsSync(p)) rmSync(p);
     }
   });
@@ -177,16 +178,12 @@ describe('MessageRepository', () => {
 
   describe('migration', () => {
     it('runs v1 then v2 then v3 then v4 on a fresh database', () => {
-      const version = db
-        .query('SELECT version FROM schema_version')
-        .get() as { version: number };
+      const version = db.query('SELECT version FROM schema_version').get() as { version: number };
       expect(version.version).toBe(4);
     });
 
     it('adds the new columns on emails', () => {
-      const cols = db
-        .query(`PRAGMA table_info(emails)`)
-        .all() as { name: string }[];
+      const cols = db.query('PRAGMA table_info(emails)').all() as { name: string }[];
       const names = cols.map((c) => c.name);
       expect(names).toContain('uid');
       expect(names).toContain('internal_date');
@@ -197,24 +194,26 @@ describe('MessageRepository', () => {
     });
 
     it('adds folder_sync_state with the expected shape', () => {
-      const tables = db
-        .query(`SELECT name FROM sqlite_master WHERE type='table'`)
-        .all() as { name: string }[];
+      const tables = db.query(`SELECT name FROM sqlite_master WHERE type='table'`).all() as {
+        name: string;
+      }[];
       const names = tables.map((t) => t.name);
       expect(names).toContain('folder_sync_state');
     });
 
     it('adds the new unique index on (account_id, folder_id, uid)', () => {
       const idx = db
-        .query(`SELECT name FROM sqlite_master WHERE type='index' AND name='uq_emails_account_folder_uid'`)
+        .query(
+          `SELECT name FROM sqlite_master WHERE type='index' AND name='uq_emails_account_folder_uid'`
+        )
         .get() as { name: string } | undefined;
       expect(idx).toBeDefined();
     });
 
     it('preserves the FTS5 triggers (insert / delete / update)', () => {
-      const triggers = db
-        .query(`SELECT name FROM sqlite_master WHERE type='trigger'`)
-        .all() as { name: string }[];
+      const triggers = db.query(`SELECT name FROM sqlite_master WHERE type='trigger'`).all() as {
+        name: string;
+      }[];
       const names = triggers.map((t) => t.name);
       expect(names).toContain('emails_fts_insert');
       expect(names).toContain('emails_fts_delete');
@@ -226,9 +225,7 @@ describe('MessageRepository', () => {
         makeMessage({ uid: 100, subject: 'Hello World' }),
       ]);
       const rows = db
-        .query(
-          `SELECT subject FROM emails_fts WHERE emails_fts MATCH ?`
-        )
+        .query('SELECT subject FROM emails_fts WHERE emails_fts MATCH ?')
         .all('Hello') as { subject: string }[];
       expect(rows).toHaveLength(1);
       expect(rows[0]?.subject).toBe('Hello World');
@@ -242,10 +239,10 @@ describe('MessageRepository', () => {
         makeMessage({ uid: 100, subject: 'brand new subject' }),
       ]);
       const old = db
-        .query(`SELECT subject FROM emails_fts WHERE emails_fts MATCH ?`)
+        .query('SELECT subject FROM emails_fts WHERE emails_fts MATCH ?')
         .all('old') as { subject: string }[];
       const neu = db
-        .query(`SELECT subject FROM emails_fts WHERE emails_fts MATCH ?`)
+        .query('SELECT subject FROM emails_fts WHERE emails_fts MATCH ?')
         .all('brand') as { subject: string }[];
       expect(old).toHaveLength(0);
       expect(neu).toHaveLength(1);
@@ -255,11 +252,11 @@ describe('MessageRepository', () => {
     it('migrating from a v1-shaped database does not drop existing rows', async () => {
       // Simulate a v1 DB: drop folder_sync_state, remove the v2 columns,
       // and insert a v1-shaped row. Then re-run migrations from scratch.
-      db.exec(`DROP TABLE IF EXISTS folder_sync_state`);
-      db.exec(`DROP INDEX IF EXISTS uq_emails_account_folder_uid`);
-      db.exec(`DROP INDEX IF EXISTS idx_emails_internal_date`);
+      db.exec('DROP TABLE IF EXISTS folder_sync_state');
+      db.exec('DROP INDEX IF EXISTS uq_emails_account_folder_uid');
+      db.exec('DROP INDEX IF EXISTS idx_emails_internal_date');
       // SQLite cannot drop columns; emulate "v1" by resetting schema_version.
-      db.exec(`DELETE FROM schema_version`);
+      db.exec('DELETE FROM schema_version');
       // Drop the v2 columns to truly emulate a v1 DB. We use the
       // 12-step rebuild, but for this test the simpler path is enough:
       // since we cannot ALTER TABLE DROP COLUMN, we instead create a
@@ -271,10 +268,7 @@ describe('MessageRepository', () => {
     it('preserves pre-existing v1 email rows on a real v1 → v4 upgrade', async () => {
       // Build a brand-new DB that looks exactly like a v1 install,
       // then point a fresh Database at it and run migrations.
-      const v1Path = join(
-        tmpdir(),
-        `termail-v1-${Date.now()}-${Math.random()}.sqlite`
-      );
+      const v1Path = join(tmpdir(), `termail-v1-${Date.now()}-${Math.random()}.sqlite`);
       try {
         // Use the v1 DDL directly through a transient bun:sqlite handle.
         const { Database: BunDb } = await import('bun:sqlite');
@@ -378,17 +372,14 @@ describe('MessageRepository', () => {
             Math.floor(Date.now() / 1000),
             'legacy body'
           );
-        fresh.query(`INSERT INTO schema_version (version) VALUES (1)`).run();
+        fresh.query('INSERT INTO schema_version (version) VALUES (1)').run();
         fresh.close();
 
         // Now open that file with the real Database class and let it
         // run the v1→v2→v3→v4 migrations.
         resetDatabase();
         const upgradedPath = v1Path; // reuse the same file
-        const v1ConfigPath = join(
-          tmpdir(),
-          `termail-v1-cfg-${Date.now()}-${Math.random()}.json`
-        );
+        const v1ConfigPath = join(tmpdir(), `termail-v1-cfg-${Date.now()}-${Math.random()}.json`);
         const v1Store = getConfigStore(v1ConfigPath);
         await v1Store.initialize();
         await v1Store.updateConfig({ database: { path: upgradedPath } } as Partial<AppConfig>);
@@ -396,16 +387,12 @@ describe('MessageRepository', () => {
         await v1Db.initialize();
 
         // Migrations applied.
-        const v = v1Db
-          .query('SELECT version FROM schema_version')
-          .get() as { version: number };
+        const v = v1Db.query('SELECT version FROM schema_version').get() as { version: number };
         expect(v.version).toBe(4);
 
         // Legacy row is still here, with uid = NULL.
         const legacy = v1Db
-          .query(
-            'SELECT id, uid, subject FROM emails WHERE id = ?'
-          )
+          .query('SELECT id, uid, subject FROM emails WHERE id = ?')
           .get('legacy-1') as { id: string; uid: number | null; subject: string };
         expect(legacy).toBeDefined();
         expect(legacy.subject).toBe('Legacy message');
@@ -448,7 +435,10 @@ describe('MessageRepository', () => {
 
     it('v4 converts legacy empty message_id to NULL and allows a second missing ID', async () => {
       const v1Path = join(tmpdir(), `termail-v1-empty-${Date.now()}-${Math.random()}.sqlite`);
-      const v1ConfigPath = join(tmpdir(), `termail-v1-empty-cfg-${Date.now()}-${Math.random()}.json`);
+      const v1ConfigPath = join(
+        tmpdir(),
+        `termail-v1-empty-cfg-${Date.now()}-${Math.random()}.json`
+      );
       try {
         const { Database: BunDb } = await import('bun:sqlite');
         const fresh = new BunDb(v1Path);
@@ -519,16 +509,30 @@ describe('MessageRepository', () => {
           CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')));
         `);
         fresh
-          .query(`INSERT INTO accounts (id, name, type, email, use_tls, auth_type) VALUES (?, ?, 'imap', ?, 1, 'password')`)
+          .query(
+            `INSERT INTO accounts (id, name, type, email, use_tls, auth_type) VALUES (?, ?, 'imap', ?, 1, 'password')`
+          )
           .run('work', 'Work', 'me@example.com');
         fresh
-          .query(`INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, 'INBOX', 'INBOX', 'inbox', '/')`)
+          .query(
+            `INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, 'INBOX', 'INBOX', 'inbox', '/')`
+          )
           .run('work:INBOX', 'work');
         // One legacy row with a missing Message-ID stored as ''.
         fresh
-          .query(`INSERT INTO emails (id, account_id, folder_id, message_id, subject, date, body_text) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-          .run('legacy-empty', 'work', 'work:INBOX', '', 'Empty Legacy', Math.floor(Date.now() / 1000), 'empty body');
-        fresh.query(`INSERT INTO schema_version (version) VALUES (1)`).run();
+          .query(
+            'INSERT INTO emails (id, account_id, folder_id, message_id, subject, date, body_text) VALUES (?, ?, ?, ?, ?, ?, ?)'
+          )
+          .run(
+            'legacy-empty',
+            'work',
+            'work:INBOX',
+            '',
+            'Empty Legacy',
+            Math.floor(Date.now() / 1000),
+            'empty body'
+          );
+        fresh.query('INSERT INTO schema_version (version) VALUES (1)').run();
         fresh.close();
 
         resetDatabase();
@@ -541,19 +545,27 @@ describe('MessageRepository', () => {
         const v = upgraded.query('SELECT version FROM schema_version').get() as { version: number };
         expect(v.version).toBe(4);
         // Legacy '' is now NULL.
-        const raw = upgraded.query('SELECT message_id FROM emails WHERE id = ?').get('legacy-empty') as {
+        const raw = upgraded
+          .query('SELECT message_id FROM emails WHERE id = ?')
+          .get('legacy-empty') as {
           message_id: string | null;
         };
         expect(raw.message_id).toBeNull();
         // Folder relationship + FTS survive.
-        const folder = upgraded.query('SELECT id FROM folders WHERE id = ?').get('work:INBOX') as { id: string } | undefined;
+        const folder = upgraded.query('SELECT id FROM folders WHERE id = ?').get('work:INBOX') as
+          | { id: string }
+          | undefined;
         expect(folder?.id).toBe('work:INBOX');
-        const fts = upgraded.query('SELECT subject FROM emails_fts WHERE emails_fts MATCH ?').all('Empty') as { subject: string }[];
+        const fts = upgraded
+          .query('SELECT subject FROM emails_fts WHERE emails_fts MATCH ?')
+          .all('Empty') as { subject: string }[];
         expect(fts).toHaveLength(1);
 
         // A second missing Message-ID now coexists via the repository.
         const upgradedRepo = new MessageRepository(upgraded);
-        upgradedRepo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 99, messageId: '', subject: 'Second missing' })]);
+        upgradedRepo.upsertMessages(baseAccount, inboxFolder, [
+          makeMessage({ uid: 99, messageId: '', subject: 'Second missing' }),
+        ]);
         const count = upgraded.query('SELECT COUNT(*) AS c FROM emails').get() as { c: number };
         expect(count.c).toBe(2);
 
@@ -575,9 +587,10 @@ describe('MessageRepository', () => {
   describe('credential non-leak', () => {
     it('ensureAccountRow writes only safe columns and leaves credentials NULL', () => {
       repo.ensureAccountRow(baseAccount);
-      const row = db
-        .query('SELECT * FROM accounts WHERE id = ?')
-        .get(baseAccount.id) as Record<string, unknown>;
+      const row = db.query('SELECT * FROM accounts WHERE id = ?').get(baseAccount.id) as Record<
+        string,
+        unknown
+      >;
       expect(row.password).toBeNull();
       expect(row.oauth_client_id).toBeNull();
       expect(row.oauth_client_secret).toBeNull();
@@ -675,9 +688,7 @@ describe('MessageRepository', () => {
       expect(got!.uid).toBe(42);
       expect(got!.messageId).toBe('<x@example.com>');
       expect(got!.subject).toBe('round trip');
-      expect(got!.fromAddresses).toEqual([
-        { name: 'Alice', address: 'alice@example.com' },
-      ]);
+      expect(got!.fromAddresses).toEqual([{ name: 'Alice', address: 'alice@example.com' }]);
       expect(got!.toAddresses).toEqual([{ name: 'Bob', address: 'bob@example.com' }]);
       expect(got!.ccAddresses).toEqual([{ name: 'Eve', address: 'eve@example.com' }]);
       expect(got!.isRead).toBe(true);
@@ -718,10 +729,9 @@ describe('MessageRepository', () => {
       // Raw storage is NULL (NULLs never collide in the UNIQUE).
       const raw = db
         .query('SELECT message_id FROM emails WHERE id IN (?, ?)')
-        .all(
-          `${baseAccount.id}:work:INBOX:11`,
-          `${baseAccount.id}:work:INBOX:12`
-        ) as { message_id: string | null }[];
+        .all(`${baseAccount.id}:work:INBOX:11`, `${baseAccount.id}:work:INBOX:12`) as {
+        message_id: string | null;
+      }[];
       expect(raw).toHaveLength(2);
       expect(raw.every((row) => row.message_id === null)).toBe(true);
 
@@ -801,9 +811,7 @@ describe('MessageRepository', () => {
       // silently rewriting the second message's identity.
       const m1 = makeMessage({ uid: 1, messageId: '<dup@example.com>' });
       const m2 = makeMessage({ uid: 2, messageId: '<dup@example.com>' });
-      expect(() =>
-        repo.upsertMessages(baseAccount, inboxFolder, [m1, m2])
-      ).toThrow(DatabaseError);
+      expect(() => repo.upsertMessages(baseAccount, inboxFolder, [m1, m2])).toThrow(DatabaseError);
     });
 
     it('inserts are atomic: a thrown mid-batch leaves no rows', () => {
@@ -932,26 +940,20 @@ describe('MessageRepository', () => {
     });
 
     it('options.status = "partial" records "partial" with the error', () => {
-      persistSyncResult(
-        repo,
-        baseAccount,
-        inboxFolder,
-        makeSyncResult([makeMessage({ uid: 1 })]),
-        { status: 'partial', error: 'batch 2 failed' }
-      );
+      persistSyncResult(repo, baseAccount, inboxFolder, makeSyncResult([makeMessage({ uid: 1 })]), {
+        status: 'partial',
+        error: 'batch 2 failed',
+      });
       const s = repo.getSyncState(baseAccount.id, 'work:INBOX');
       expect(s!.lastSyncStatus).toBe('partial');
       expect(s!.lastError).toBe('batch 2 failed');
     });
 
     it('options.status = "error" records "error" with the error', () => {
-      persistSyncResult(
-        repo,
-        baseAccount,
-        inboxFolder,
-        makeSyncResult([makeMessage({ uid: 1 })]),
-        { status: 'error', error: 'db down' }
-      );
+      persistSyncResult(repo, baseAccount, inboxFolder, makeSyncResult([makeMessage({ uid: 1 })]), {
+        status: 'error',
+        error: 'db down',
+      });
       const s = repo.getSyncState(baseAccount.id, 'work:INBOX');
       expect(s!.lastSyncStatus).toBe('error');
       expect(s!.lastError).toBe('db down');
@@ -959,35 +961,20 @@ describe('MessageRepository', () => {
 
     it('partial / error with no error message throws DatabaseError', () => {
       expect(() =>
-        persistSyncResult(
-          repo,
-          baseAccount,
-          inboxFolder,
-          makeSyncResult([]),
-          { status: 'partial' }
-        )
+        persistSyncResult(repo, baseAccount, inboxFolder, makeSyncResult([]), { status: 'partial' })
       ).toThrow(DatabaseError);
       expect(() =>
-        persistSyncResult(
-          repo,
-          baseAccount,
-          inboxFolder,
-          makeSyncResult([]),
-          { status: 'error' }
-        )
+        persistSyncResult(repo, baseAccount, inboxFolder, makeSyncResult([]), { status: 'error' })
       ).toThrow(DatabaseError);
     });
 
     it('partial status does not regress highest_uid', () => {
       repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 50 })]);
       const before = repo.getSyncState(baseAccount.id, 'work:INBOX')!.highestUid;
-      persistSyncResult(
-        repo,
-        baseAccount,
-        inboxFolder,
-        makeSyncResult([], { deduped: 0 }),
-        { status: 'partial', error: 'transient' }
-      );
+      persistSyncResult(repo, baseAccount, inboxFolder, makeSyncResult([], { deduped: 0 }), {
+        status: 'partial',
+        error: 'transient',
+      });
       const after = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
       expect(after.highestUid).toBe(before);
       expect(after.lastSyncStatus).toBe('partial');

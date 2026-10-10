@@ -2,12 +2,16 @@
  * Configuration store - handles loading/saving JSON config with Zod validation
  */
 
-import { existsSync, readFileSync } from 'fs';
-import { dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AppConfig, DeepPartial } from '../types/config.js';
 import { ConfigError } from '../utils/errors.js';
-import { ensureTermailDataDirSync, restrictFilePermissions, writePrivateFileSync } from '../utils/filePermissions.js';
+import {
+  ensureTermailDataDirSync,
+  restrictFilePermissions,
+  writePrivateFileSync,
+} from '../utils/filePermissions.js';
 import { logger } from '../utils/logger.js';
 import { getConfigPath, getDefaultConfig, mergeWithDefaults } from './defaults.js';
 import { validateConfig, validateConfigSafe } from './schema.js';

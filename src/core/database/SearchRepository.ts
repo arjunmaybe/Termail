@@ -157,7 +157,7 @@ export interface StructuredSearchOptions {
  *      `;`, `!`, `?`, `[`, `]`, `{`, `}`, `~`, `|`, `&`, `/`, `\`,
  *      and any character that the FTS5 parser treats as syntax.
  *   3. Drop any token that becomes empty after stripping.
-  *   4. Drop standalone FTS5 operators (`OR`, `AND`, `NOT`,
+ *   4. Drop standalone FTS5 operators (`OR`, `AND`, `NOT`,
  *      `NEAR`, case-insensitive) and strip leading `-` (FTS5 NOT
  *      prefix) so user input can never become OR/AND/NOT/NEAR or
  *      leading-minus syntax. Internal hyphens (`hello-world`) are
@@ -424,7 +424,9 @@ export class SearchRepository {
       // Join to `folders` so the path match is exact (not the
       // synthesized local id).
       fromClause =
-        options.text !== undefined && options.text.trim().length > 0 && buildMatchQuery(options.text) !== null
+        options.text !== undefined &&
+        options.text.trim().length > 0 &&
+        buildMatchQuery(options.text) !== null
           ? 'FROM emails_fts JOIN emails AS e ON e.rowid = emails_fts.rowid JOIN folders AS f ON f.id = e.folder_id'
           : 'FROM emails AS e JOIN folders AS f ON f.id = e.folder_id';
       where.push('LOWER(f.full_name) = LOWER(?)');

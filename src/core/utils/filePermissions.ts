@@ -60,8 +60,8 @@
  *     must configure it outside Termail.
  */
 
-import { chmodSync, mkdirSync, writeFileSync } from 'fs';
-import { dirname, resolve, sep } from 'path';
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
 import { DEFAULT_CONFIG, getConfigPath, getDatabasePath } from '../types/config.js';
 import { logger } from './logger.js';
 
