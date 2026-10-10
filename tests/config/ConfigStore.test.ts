@@ -2,9 +2,9 @@
  * ConfigStore tests
  */
 
-import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
-import { dirname, join } from 'path';
+import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDefaultConfig } from '../../src/core/config/defaults.js';

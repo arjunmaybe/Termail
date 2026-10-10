@@ -15,8 +15,8 @@
  * `TERMAIL_WORK_MAIL_PASSWORD`.
  */
 
-import { AuthenticationError } from '../utils/errors.js';
 import type { AccountConfig } from '../types/config.js';
+import { AuthenticationError } from '../utils/errors.js';
 
 export interface ResolvedCredentials {
   /** Username passed to the IMAP server. Falls back to the account email. */

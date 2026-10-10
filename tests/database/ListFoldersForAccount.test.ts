@@ -5,9 +5,9 @@
  * returns the right rows in the Phase 2.2 deterministic order.
  */
 
-import { existsSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
@@ -97,7 +97,15 @@ describe('MessageRepository.listFoldersForAccount', () => {
     db.query(
       `INSERT INTO folders (id, account_id, name, full_name, type, delimiter, attributes)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run('acct:Custom', 'acct', 'My Stuff', 'Path/To/My Stuff', 'custom', '/', '["HasNoChildren"]');
+    ).run(
+      'acct:Custom',
+      'acct',
+      'My Stuff',
+      'Path/To/My Stuff',
+      'custom',
+      '/',
+      '["HasNoChildren"]'
+    );
     const folders = repo.listFoldersForAccount('acct');
     expect(folders).toHaveLength(1);
     const f = folders[0]!;

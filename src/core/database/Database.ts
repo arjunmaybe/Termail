@@ -3,8 +3,8 @@
  */
 
 import { Database as BunDatabase, type SQLQueryBindings, type Statement } from 'bun:sqlite';
-import { dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getDatabasePath } from '../types/config.js';
 import type { AppConfig } from '../types/config.js';
 import { DatabaseError } from '../utils/errors.js';

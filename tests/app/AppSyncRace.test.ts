@@ -9,16 +9,16 @@
  *  - stale result must not overwrite the newly selected folder
  */
 
-import { existsSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SyncOutcome } from '../../src/app/services/SyncService.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
-import { actions, selectors } from '../../src/core/state/AppState.js';
-import type { SyncOutcome } from '../../src/app/services/SyncService.js';
 import type { PersistedEmail, PersistedFolder } from '../../src/core/database/index.js';
-import type { AppConfig, AccountConfig } from '../../src/core/types/config.js';
+import { actions, selectors } from '../../src/core/state/AppState.js';
+import type { AccountConfig, AppConfig } from '../../src/core/types/config.js';
 
 function makeAccountConfig(over: Partial<AccountConfig> = {}): AccountConfig {
   return {
@@ -104,18 +104,24 @@ describe('B5 App.requestSync single-flight + stale guard', () => {
     const database = getDatabase(configStore.getConfig());
     await database.initialize();
 
-    database.query(
-      `INSERT INTO accounts (id, name, type, email, use_tls, auth_type)
-       VALUES (?, ?, 'imap', ?, 1, 'password')`
-    ).run('work', 'Work', 'me@example.com');
-    database.query(
-      `INSERT INTO folders (id, account_id, name, full_name, type, delimiter)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run('work:INBOX', 'work', 'INBOX', 'INBOX', 'inbox', '/');
-    database.query(
-      `INSERT INTO folders (id, account_id, name, full_name, type, delimiter)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run('work:Sent', 'work', 'Sent', 'Sent', 'sent', '/');
+    database
+      .query(
+        `INSERT INTO accounts (id, name, type, email, use_tls, auth_type)
+         VALUES (?, ?, 'imap', ?, 1, 'password')`
+      )
+      .run('work', 'Work', 'me@example.com');
+    database
+      .query(
+        `INSERT INTO folders (id, account_id, name, full_name, type, delimiter)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run('work:INBOX', 'work', 'INBOX', 'INBOX', 'inbox', '/');
+    database
+      .query(
+        `INSERT INTO folders (id, account_id, name, full_name, type, delimiter)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run('work:Sent', 'work', 'Sent', 'Sent', 'sent', '/');
   });
 
   afterEach(() => {
@@ -129,9 +135,11 @@ describe('B5 App.requestSync single-flight + stale guard', () => {
 
   async function makeApp(fake: { syncAccountFolder: ReturnType<typeof vi.fn> }) {
     const { App } = await import('../../src/app/App.js');
-    const renderer = (await import('@opentui/core/testing').then((m) =>
-      m.createTestRenderer({ width: 120, height: 40 })
-    )).renderer;
+    const renderer = (
+      await import('@opentui/core/testing').then((m) =>
+        m.createTestRenderer({ width: 120, height: 40 })
+      )
+    ).renderer;
     try {
       const app = new App(renderer, {
         id: 'app-b5',
@@ -162,7 +170,9 @@ describe('B5 App.requestSync single-flight + stale guard', () => {
     const fake = { syncAccountFolder: vi.fn() };
     let resolveSync!: (o: SyncOutcome) => void;
     fake.syncAccountFolder.mockReturnValueOnce(
-      new Promise<SyncOutcome>((resolve) => { resolveSync = resolve; })
+      new Promise<SyncOutcome>((resolve) => {
+        resolveSync = resolve;
+      })
     );
     const { app, renderer } = await makeApp(fake);
     try {
@@ -188,14 +198,24 @@ describe('B5 App.requestSync single-flight + stale guard', () => {
     const fake = { syncAccountFolder: vi.fn() };
     let resolveSync!: (o: SyncOutcome) => void;
     fake.syncAccountFolder.mockReturnValueOnce(
-      new Promise<SyncOutcome>((resolve) => { resolveSync = resolve; })
+      new Promise<SyncOutcome>((resolve) => {
+        resolveSync = resolve;
+      })
     );
     const { app, renderer } = await makeApp(fake);
     try {
       expect(selectors.currentFolderId).toBe('work:INBOX');
 
-      const inboxEmail = makeEmail({ id: 'work:INBOX:9', folderId: 'work:INBOX', subject: 'stale inbox' });
-      const sentEmail = makeEmail({ id: 'work:Sent:7', folderId: 'work:Sent', subject: 'current sent' });
+      const inboxEmail = makeEmail({
+        id: 'work:INBOX:9',
+        folderId: 'work:INBOX',
+        subject: 'stale inbox',
+      });
+      const sentEmail = makeEmail({
+        id: 'work:Sent:7',
+        folderId: 'work:Sent',
+        subject: 'current sent',
+      });
 
       // First r starts a sync for INBOX.
       const first = app.requestSync();
@@ -211,7 +231,12 @@ describe('B5 App.requestSync single-flight + stale guard', () => {
       resolveSync({
         kind: 'ok',
         folders: [
-          makePersistedFolder({ id: 'work:INBOX', name: 'INBOX', fullName: 'INBOX', type: 'inbox' }),
+          makePersistedFolder({
+            id: 'work:INBOX',
+            name: 'INBOX',
+            fullName: 'INBOX',
+            type: 'inbox',
+          }),
           makePersistedFolder({ id: 'work:Sent', name: 'Sent', fullName: 'Sent', type: 'sent' }),
         ],
         messages: [inboxEmail],
@@ -233,7 +258,9 @@ describe('B5 App.requestSync single-flight + stale guard', () => {
     const fake = { syncAccountFolder: vi.fn() };
     let resolveSync!: (o: SyncOutcome) => void;
     fake.syncAccountFolder.mockReturnValueOnce(
-      new Promise<SyncOutcome>((resolve) => { resolveSync = resolve; })
+      new Promise<SyncOutcome>((resolve) => {
+        resolveSync = resolve;
+      })
     );
     // Second slot (after first resolves) returns ok empty.
     fake.syncAccountFolder.mockResolvedValueOnce({

@@ -3,8 +3,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { aiConfigSchema, validateConfig } from '../../src/core/config/schema.js';
 import { mergeWithDefaults } from '../../src/core/config/defaults.js';
+import { aiConfigSchema, validateConfig } from '../../src/core/config/schema.js';
 import { DEFAULT_AI_CONFIG } from '../../src/core/types/config.js';
 
 describe('aiConfigSchema', () => {

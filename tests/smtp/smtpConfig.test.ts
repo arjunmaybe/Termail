@@ -132,6 +132,8 @@ describe('resolveSmtpConfig', () => {
   });
 
   it('throws on invalid port', () => {
-    expect(() => resolveSmtpConfig({ ...base, smtpHost: 's', smtpPort: 0 })).toThrow(/invalid SMTP port/i);
+    expect(() => resolveSmtpConfig({ ...base, smtpHost: 's', smtpPort: 0 })).toThrow(
+      /invalid SMTP port/i
+    );
   });
 });

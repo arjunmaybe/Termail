@@ -3,14 +3,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { AccountConfig } from '../../src/core/types/config.js';
-import { AuthenticationError } from '../../src/core/utils/errors.js';
 import {
   getEnvSecretName,
   getEnvSecretSuffix,
   redactSecrets,
   resolveCredentials,
 } from '../../src/core/imap/credentials.js';
+import type { AccountConfig } from '../../src/core/types/config.js';
+import { AuthenticationError } from '../../src/core/utils/errors.js';
 
 const baseAccount: AccountConfig = {
   id: 'work',

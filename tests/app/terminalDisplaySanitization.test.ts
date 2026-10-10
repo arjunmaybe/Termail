@@ -9,7 +9,7 @@
  * bytes. Dummy data only, no network.
  */
 
-import { type CliRenderer } from '@opentui/core';
+import type { CliRenderer } from '@opentui/core';
 import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FolderTabs } from '../../src/app/components/FolderTabs.js';
@@ -23,7 +23,7 @@ import type { Folder } from '../../src/core/types/index.js';
 const ESC = String.fromCharCode(27);
 const BEL = String.fromCharCode(7);
 
-const EVIL_MIDDLE = ESC + ']0;PWNED' + BEL;
+const EVIL_MIDDLE = `${ESC}]0;PWNED${BEL}`;
 
 function makeFolder(over: Partial<Folder> = {}): Folder {
   return {
@@ -110,7 +110,7 @@ describe('terminal display sanitization', () => {
   });
 
   it('strips escapes from server-derived sync error text', () => {
-    const formatted = formatSyncError('NO ' + ESC + '[2J' + ' login rejected' + BEL);
+    const formatted = formatSyncError(`NO ${ESC}[2J login rejected${BEL}`);
     expect(formatted).toMatch(/^● Error: /);
     expect(formatted).toContain('login rejected');
     expect(hasControlBytes(formatted)).toBe(false);
@@ -120,7 +120,7 @@ describe('terminal display sanitization', () => {
     renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
     const tabs = new FolderTabs(renderer, { themeMode: 'dark' });
     try {
-      actions.setFolders([makeFolder({ name: 'INBOX' + EVIL_MIDDLE })]);
+      actions.setFolders([makeFolder({ name: `INBOX${EVIL_MIDDLE}` })]);
       const texts = textsById(tabs as unknown as ChunkNode);
       const tab = texts.get('folder-tab-work:INBOX') ?? '';
       expect(tab).toContain('INBOX]0;PWNED');
@@ -134,7 +134,7 @@ describe('terminal display sanitization', () => {
     renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
     const bar = new StatusBar(renderer, { themeMode: 'dark' });
     try {
-      actions.setFolders([makeFolder({ name: 'INBOX' + EVIL_MIDDLE })]);
+      actions.setFolders([makeFolder({ name: `INBOX${EVIL_MIDDLE}` })]);
       actions.setCurrentFolder('work:INBOX');
       const texts = textsById(bar as unknown as ChunkNode);
       const label = texts.get('status-folder') ?? '';
@@ -150,7 +150,7 @@ describe('terminal display sanitization', () => {
     const view = new WelcomeView(renderer, { themeMode: 'dark' });
     try {
       actions.setAccounts([makeAccount()]);
-      actions.setFolders([makeFolder({ name: 'INBOX' + EVIL_MIDDLE })]);
+      actions.setFolders([makeFolder({ name: `INBOX${EVIL_MIDDLE}` })]);
       actions.setCurrentFolder('work:INBOX');
       const texts = textsById(view as unknown as ChunkNode);
       const subtitle = texts.get('welcome-subtitle') ?? '';
@@ -166,7 +166,7 @@ describe('terminal display sanitization', () => {
     const bar = new SearchInputBar(renderer, { themeMode: 'dark' });
     try {
       actions.setSearchActive(true);
-      actions.setSearchQuery('hello' + ESC + '[2Jworld' + BEL);
+      actions.setSearchQuery(`hello${ESC}[2Jworld${BEL}`);
       const texts = textsById(bar as unknown as ChunkNode);
       const input = texts.get('search-input') ?? '';
       expect(input).toBe('hello[2Jworld');

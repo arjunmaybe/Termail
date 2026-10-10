@@ -5,10 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { AiService } from '../../src/core/ai/AiService.js';
-import {
-  OpenRouterTransport,
-  type FetchFn,
-} from '../../src/core/ai/OpenRouterTransport.js';
+import { type FetchFn, OpenRouterTransport } from '../../src/core/ai/OpenRouterTransport.js';
 import { aiConfigSchema } from '../../src/core/config/schema.js';
 import { DEFAULT_AI_CONFIG } from '../../src/core/types/config.js';
 import { ValidationError } from '../../src/core/utils/errors.js';
@@ -72,12 +69,10 @@ describe('AI endpoint HTTPS enforcement', () => {
       timeoutMs: 1000,
       fetchFn: fetchMock as unknown as FetchFn,
     });
-    const err = await transport
-      .complete({ system: SECRET_SUBJECT, user: SECRET_BODY })
-      .then(
-        () => new Error('expected throw'),
-        (e: unknown) => e as Error
-      );
+    const err = await transport.complete({ system: SECRET_SUBJECT, user: SECRET_BODY }).then(
+      () => new Error('expected throw'),
+      (e: unknown) => e as Error
+    );
     expect(err).toBeInstanceOf(ValidationError);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(err.message).not.toContain(DUMMY_KEY);

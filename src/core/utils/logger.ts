@@ -19,14 +19,9 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 };
 
 let currentLevel: LogLevel = 'info';
-let isTestMode = false;
 
 export function setLogLevel(level: LogLevel): void {
   currentLevel = level;
-}
-
-export function setTestMode(enabled: boolean): void {
-  isTestMode = enabled;
 }
 
 function shouldLog(level: LogLevel): boolean {

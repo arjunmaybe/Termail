@@ -9,8 +9,8 @@ import {
   TextAttributes,
   TextRenderable,
 } from '@opentui/core';
-import { selectors, subscribe } from '../../core/state/AppState.js';
 import type { PersistedEmail } from '../../core/database/index.js';
+import { selectors, subscribe } from '../../core/state/AppState.js';
 import type { EmailAddress } from '../../core/types/email.js';
 import { sanitizeForTerminal } from '../../core/utils/terminal.js';
 import { EmailListView } from '../components/EmailListView.js';
@@ -163,9 +163,7 @@ export class ContentPane extends BoxRenderable {
     const currentFolder = selectors.currentFolder;
 
     if (selectedId) {
-      const sourceEmails = selectors.searchActive
-        ? (selectors.searchHits ?? [])
-        : selectors.emails;
+      const sourceEmails = selectors.searchActive ? (selectors.searchHits ?? []) : selectors.emails;
 
       const email = sourceEmails.find((e) => e.id === selectedId);
       if (email) {

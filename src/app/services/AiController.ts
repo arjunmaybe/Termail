@@ -12,11 +12,11 @@
  *   - AI output is display text only.
  */
 
-import type { PersistedEmail } from '../../core/database/index.js';
-import { AiService } from '../../core/ai/AiService.js';
+import type { AiService } from '../../core/ai/AiService.js';
 import type { AiEmailInput, AiOutcome } from '../../core/ai/types.js';
-import type { EmailAddress } from '../../core/types/email.js';
+import type { PersistedEmail } from '../../core/database/index.js';
 import { actions, selectors } from '../../core/state/AppState.js';
+import type { EmailAddress } from '../../core/types/email.js';
 import { logger } from '../../core/utils/logger.js';
 
 export type SelectedEmailProvider = () => PersistedEmail | null;

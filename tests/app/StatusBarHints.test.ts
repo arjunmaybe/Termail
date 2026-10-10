@@ -6,7 +6,7 @@
  * one-line bar dense.
  */
 
-import { type CliRenderer } from '@opentui/core';
+import type { CliRenderer } from '@opentui/core';
 import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { StatusBar } from '../../src/app/layout/StatusBar.js';

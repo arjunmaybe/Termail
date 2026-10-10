@@ -4,10 +4,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import {
-  OpenRouterTransport,
-  type FetchFn,
-} from '../../src/core/ai/OpenRouterTransport.js';
+import { type FetchFn, OpenRouterTransport } from '../../src/core/ai/OpenRouterTransport.js';
 import { AuthenticationError, NetworkError } from '../../src/core/utils/errors.js';
 
 const DUMMY_KEY = 'test-ai-key-123';
@@ -40,7 +37,7 @@ describe('OpenRouterTransport', () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe(ENDPOINT);
     expect(init.method).toBe('POST');
-    expect((init.headers as Record<string, string>)['Authorization']).toBe(`Bearer ${DUMMY_KEY}`);
+    expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${DUMMY_KEY}`);
     const payload = JSON.parse(init.body as string) as {
       model: string;
       messages: Array<{ role: string; content: string }>;
@@ -53,7 +50,8 @@ describe('OpenRouterTransport', () => {
   });
 
   it('maps 401 to AuthenticationError without the key', async () => {
-    const fetchFn = (async () => new Response('unauthorized', { status: 401 })) as unknown as FetchFn;
+    const fetchFn = (async () =>
+      new Response('unauthorized', { status: 401 })) as unknown as FetchFn;
     const transport = new OpenRouterTransport({
       endpoint: ENDPOINT,
       model: 'm',
@@ -121,7 +119,9 @@ describe('OpenRouterTransport', () => {
       timeoutMs: 1000,
       fetchFn,
     });
-    await expect(transport.complete({ system: 's', user: 'u' })).rejects.toBeInstanceOf(NetworkError);
+    await expect(transport.complete({ system: 's', user: 'u' })).rejects.toBeInstanceOf(
+      NetworkError
+    );
   });
 
   it('times out when fetch never settles', async () => {

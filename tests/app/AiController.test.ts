@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AiController } from '../../src/app/services/AiController.js';
 import { AiService } from '../../src/core/ai/AiService.js';
 import type { AiOutcome } from '../../src/core/ai/types.js';
-import { actions, selectors } from '../../src/core/state/AppState.js';
 import type { PersistedEmail } from '../../src/core/database/index.js';
+import { actions, selectors } from '../../src/core/state/AppState.js';
 import { DEFAULT_AI_CONFIG } from '../../src/core/types/config.js';
 
 function makeEmail(over: Partial<PersistedEmail> = {}): PersistedEmail {

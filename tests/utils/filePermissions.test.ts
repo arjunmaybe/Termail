@@ -5,9 +5,9 @@
  * there); platform-independent ownership checks run everywhere.
  */
 
-import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
-import { dirname, join } from 'path';
+import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG, getConfigPath, getDatabasePath } from '../../src/core/types/config.js';
 import {
@@ -114,12 +114,12 @@ describe('Termail-managed directories', () => {
 
   afterEach(() => {
     if (savedHome === undefined) {
-      delete process.env.HOME;
+      Reflect.deleteProperty(process.env, 'HOME');
     } else {
       process.env.HOME = savedHome;
     }
     if (savedProfile === undefined) {
-      delete process.env.USERPROFILE;
+      Reflect.deleteProperty(process.env, 'USERPROFILE');
     } else {
       process.env.USERPROFILE = savedProfile;
     }
@@ -175,12 +175,12 @@ describe('Termail-managed directories', () => {
   itPosix('leaves pre-existing custom directories untouched', () => {
     // Real HOME (restored): tmpdir custom paths are unmanaged.
     if (savedHome === undefined) {
-      delete process.env.HOME;
+      Reflect.deleteProperty(process.env, 'HOME');
     } else {
       process.env.HOME = savedHome;
     }
     if (savedProfile === undefined) {
-      delete process.env.USERPROFILE;
+      Reflect.deleteProperty(process.env, 'USERPROFILE');
     } else {
       process.env.USERPROFILE = savedProfile;
     }

@@ -93,8 +93,16 @@ describe('B9 before: day semantics (service level)', () => {
     messageRepo.upsertMessages(baseAccount, inboxFolder, [
       makeMessage({ uid: 1, subject: 'midnight', internalDate: new Date('2026-03-15T00:00:00Z') }),
       makeMessage({ uid: 2, subject: 'midday', internalDate: new Date('2026-03-15T12:00:00Z') }),
-      makeMessage({ uid: 3, subject: 'end-of-day', internalDate: new Date('2026-03-15T23:59:59Z') }),
-      makeMessage({ uid: 4, subject: 'next-day-midnight', internalDate: new Date('2026-03-16T00:00:00Z') }),
+      makeMessage({
+        uid: 3,
+        subject: 'end-of-day',
+        internalDate: new Date('2026-03-15T23:59:59Z'),
+      }),
+      makeMessage({
+        uid: 4,
+        subject: 'next-day-midnight',
+        internalDate: new Date('2026-03-16T00:00:00Z'),
+      }),
       makeMessage({ uid: 5, subject: 'prev-day', internalDate: new Date('2026-03-14T23:59:59Z') }),
     ]);
   });

@@ -21,24 +21,17 @@
  */
 
 import type { Database } from '../../core/database/Database.js';
-import type {
-  PersistedEmail,
-  PersistedFolder,
-} from '../../core/database/index.js';
 import {
+  MessageRepository,
   buildImapSyncLimits,
   deriveFolderId,
-  MessageRepository,
 } from '../../core/database/MessageRepository.js';
-import type { SyncFolder } from '../../core/imap/folders.js';
+import type { PersistedEmail, PersistedFolder } from '../../core/database/index.js';
 import type { ImapService } from '../../core/imap/ImapService.js';
 import { getImapService, resetImapService } from '../../core/imap/ImapService.js';
+import type { SyncFolder } from '../../core/imap/folders.js';
 import type { AccountConfig } from '../../core/types/config.js';
-import {
-  AuthenticationError,
-  NetworkError,
-  getErrorMessage,
-} from '../../core/utils/errors.js';
+import { AuthenticationError, NetworkError, getErrorMessage } from '../../core/utils/errors.js';
 import { logger } from '../../core/utils/logger.js';
 
 /** Factory that produces an `ImapService` for a given account. */
@@ -120,7 +113,7 @@ export class SyncService {
         return mapConnectError(error);
       }
 
-      let folders;
+      let folders: Awaited<ReturnType<typeof imap.syncFolders>>['folders'];
       try {
         const folderResult = await imap.syncFolders();
         folders = folderResult.folders;
@@ -142,7 +135,7 @@ export class SyncService {
         return { kind: 'no-folder', message: 'No selectable folders on server' };
       }
 
-      let result;
+      let result: Awaited<ReturnType<typeof imap.syncMessages>>;
       try {
         const folderId = deriveFolderId(account.id, target.path);
         const checkpoint = this.repository.getSyncState(account.id, folderId);
@@ -160,11 +153,8 @@ export class SyncService {
       }
 
       const persistedFolders = this.repository.listFoldersForAccount(account.id);
-      const targetId =
-        persistedFolders.find((f) => f.fullName === target.path)?.id ?? null;
-      const messages = targetId
-        ? this.repository.listByFolder(account.id, targetId, 500)
-        : [];
+      const targetId = persistedFolders.find((f) => f.fullName === target.path)?.id ?? null;
+      const messages = targetId ? this.repository.listByFolder(account.id, targetId, 500) : [];
 
       logger.info('Sync completed', {
         accountId: account.id,
@@ -199,10 +189,7 @@ export class SyncService {
    * folder. The caller is responsible for mapping these to
    * `AppState` actions.
    */
-  async syncAccountFolder(
-    account: AccountConfig,
-    imapFolderPath: string
-  ): Promise<SyncOutcome> {
+  async syncAccountFolder(account: AccountConfig, imapFolderPath: string): Promise<SyncOutcome> {
     if (!account || !account.id) {
       return { kind: 'no-account', message: 'No account configured' };
     }
@@ -222,7 +209,7 @@ export class SyncService {
         return mapConnectError(error);
       }
 
-      let folders;
+      let folders: Awaited<ReturnType<typeof imap.syncFolders>>['folders'];
       try {
         const folderResult = await imap.syncFolders();
         folders = folderResult.folders;
@@ -264,15 +251,12 @@ export class SyncService {
       // means a full sync. `MAX()` in the repository guarantees the
       // checkpoint never regresses, so a stale or empty batch cannot move
       // it backwards.
-      let result;
+      let result: Awaited<ReturnType<typeof imap.syncMessages>>;
       try {
         const folderId = deriveFolderId(account.id, target.path);
         const checkpoint = this.repository.getSyncState(account.id, folderId);
         const limits = buildImapSyncLimits(checkpoint);
-        result = await imap.syncMessages(
-          imapFolderPath,
-          limits ? { limits } : {}
-        );
+        result = await imap.syncMessages(imapFolderPath, limits ? { limits } : {});
       } catch (error) {
         this.recordSyncFailure(account, target, error);
         throw error;
@@ -289,11 +273,8 @@ export class SyncService {
       // would return, including any folders the server didn't list this
       // time but were already persisted from prior runs.
       const persistedFolders = this.repository.listFoldersForAccount(account.id);
-      const targetId =
-        persistedFolders.find((f) => f.fullName === imapFolderPath)?.id ?? null;
-      const messages = targetId
-        ? this.repository.listByFolder(account.id, targetId, 500)
-        : [];
+      const targetId = persistedFolders.find((f) => f.fullName === imapFolderPath)?.id ?? null;
+      const messages = targetId ? this.repository.listByFolder(account.id, targetId, 500) : [];
 
       logger.info('Sync completed', {
         accountId: account.id,

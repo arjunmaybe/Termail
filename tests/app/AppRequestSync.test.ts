@@ -8,14 +8,14 @@
  * reads go through the real repository.
  */
 
-import { existsSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { type SyncOutcome, SyncService } from '../../src/app/services/SyncService.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import { actions, selectors } from '../../src/core/state/AppState.js';
-import { SyncService, type SyncOutcome } from '../../src/app/services/SyncService.js';
 import type { AppConfig } from '../../src/core/types/config.js';
 import type { AccountConfig } from '../../src/core/types/config.js';
 
@@ -66,14 +66,18 @@ describe('App.requestSync', () => {
 
     // Seed an INBOX folder so the App's initialize() picks up a current
     // folder and `requestSync()` has a target to sync.
-    database.query(
-      `INSERT INTO accounts (id, name, type, email, use_tls, auth_type)
-       VALUES (?, ?, 'imap', ?, 1, 'password')`
-    ).run('work', 'Work', 'me@example.com');
-    database.query(
-      `INSERT INTO folders (id, account_id, name, full_name, type, delimiter)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run('work:INBOX', 'work', 'INBOX', 'INBOX', 'inbox', '/');
+    database
+      .query(
+        `INSERT INTO accounts (id, name, type, email, use_tls, auth_type)
+         VALUES (?, ?, 'imap', ?, 1, 'password')`
+      )
+      .run('work', 'Work', 'me@example.com');
+    database
+      .query(
+        `INSERT INTO folders (id, account_id, name, full_name, type, delimiter)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run('work:INBOX', 'work', 'INBOX', 'INBOX', 'inbox', '/');
   });
 
   afterEach(() => {
@@ -95,9 +99,11 @@ describe('App.requestSync', () => {
     Object.assign(syncService, fake);
     // Constructing App triggers `initialize()` which itself calls
     // `setAccounts` and `setFolders` based on the config + DB.
-    const renderer = (await import('@opentui/core/testing').then((m) =>
-      m.createTestRenderer({ width: 120, height: 40 })
-    )).renderer;
+    const renderer = (
+      await import('@opentui/core/testing').then((m) =>
+        m.createTestRenderer({ width: 120, height: 40 })
+      )
+    ).renderer;
     try {
       const app = new App(renderer, {
         id: 'app',
@@ -213,9 +219,11 @@ describe('App.requestSync', () => {
     const emptyDb = getDatabase(configStore.getConfig());
     await emptyDb.initialize();
     const { App } = await import('../../src/app/App.js');
-    const renderer = (await import('@opentui/core/testing').then((m) =>
-      m.createTestRenderer({ width: 120, height: 40 })
-    )).renderer;
+    const renderer = (
+      await import('@opentui/core/testing').then((m) =>
+        m.createTestRenderer({ width: 120, height: 40 })
+      )
+    ).renderer;
     try {
       const app = new App(renderer, {
         id: 'app-empty',
@@ -258,14 +266,18 @@ describe('App.requestSync', () => {
     const noFolderDb = getDatabase(configStore.getConfig());
     await noFolderDb.initialize();
     // Seed the account row but no folders.
-    noFolderDb.query(
-      `INSERT INTO accounts (id, name, type, email, use_tls, auth_type)
-       VALUES (?, ?, 'imap', ?, 1, 'password')`
-    ).run('work', 'Work', 'me@example.com');
+    noFolderDb
+      .query(
+        `INSERT INTO accounts (id, name, type, email, use_tls, auth_type)
+         VALUES (?, ?, 'imap', ?, 1, 'password')`
+      )
+      .run('work', 'Work', 'me@example.com');
     const { App } = await import('../../src/app/App.js');
-    const renderer = (await import('@opentui/core/testing').then((m) =>
-      m.createTestRenderer({ width: 120, height: 40 })
-    )).renderer;
+    const renderer = (
+      await import('@opentui/core/testing').then((m) =>
+        m.createTestRenderer({ width: 120, height: 40 })
+      )
+    ).renderer;
     try {
       const app = new App(renderer, {
         id: 'app-nofolder',
@@ -285,7 +297,12 @@ describe('App.requestSync', () => {
       renderer.stop();
       renderer.destroy();
       resetDatabase();
-      for (const p of [noFolderDbPath, `${noFolderDbPath}-wal`, `${noFolderDbPath}-shm`, noFolderConfigPath]) {
+      for (const p of [
+        noFolderDbPath,
+        `${noFolderDbPath}-wal`,
+        `${noFolderDbPath}-shm`,
+        noFolderConfigPath,
+      ]) {
         if (existsSync(p)) rmSync(p);
       }
     }

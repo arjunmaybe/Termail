@@ -9,16 +9,16 @@
  *     overwrite the newly opened buffer (post-await guard)
  */
 
-import { existsSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AiService } from '../../src/core/ai/AiService.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
-import { actions, selectors } from '../../src/core/state/AppState.js';
 import type { PersistedEmail } from '../../src/core/database/index.js';
-import type { AiService } from '../../src/core/ai/AiService.js';
-import type { AppConfig, AccountConfig } from '../../src/core/types/config.js';
+import { actions, selectors } from '../../src/core/state/AppState.js';
+import type { AccountConfig, AppConfig } from '../../src/core/types/config.js';
 
 function makeAccountConfig(over: Partial<AccountConfig> = {}): AccountConfig {
   return {
@@ -86,14 +86,18 @@ describe('B2 App AI/compose guard', () => {
     const database = getDatabase(configStore.getConfig());
     await database.initialize();
 
-    database.query(
-      `INSERT INTO accounts (id, name, type, email, use_tls, auth_type)
-       VALUES (?, ?, 'imap', ?, 1, 'password')`
-    ).run('work', 'Work', 'me@example.com');
-    database.query(
-      `INSERT INTO folders (id, account_id, name, full_name, type, delimiter)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run('work:INBOX', 'work', 'INBOX', 'INBOX', 'inbox', '/');
+    database
+      .query(
+        `INSERT INTO accounts (id, name, type, email, use_tls, auth_type)
+         VALUES (?, ?, 'imap', ?, 1, 'password')`
+      )
+      .run('work', 'Work', 'me@example.com');
+    database
+      .query(
+        `INSERT INTO folders (id, account_id, name, full_name, type, delimiter)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run('work:INBOX', 'work', 'INBOX', 'INBOX', 'inbox', '/');
   });
 
   afterEach(() => {
@@ -107,9 +111,11 @@ describe('B2 App AI/compose guard', () => {
 
   async function makeAppWithFakeAi(fakeAi: unknown) {
     const { App } = await import('../../src/app/App.js');
-    const renderer = (await import('@opentui/core/testing').then((m) =>
-      m.createTestRenderer({ width: 120, height: 40 })
-    )).renderer;
+    const renderer = (
+      await import('@opentui/core/testing').then((m) =>
+        m.createTestRenderer({ width: 120, height: 40 })
+      )
+    ).renderer;
     try {
       const app = new App(renderer, {
         id: 'app-b2',
@@ -226,7 +232,10 @@ describe('B2 App AI/compose guard', () => {
   it('compose opened while AI is in flight => does not overwrite the new buffer', async () => {
     let resolveDraft!: (v: { kind: 'ok'; text: string }) => void;
     const draftReply = vi.fn(
-      () => new Promise<{ kind: 'ok'; text: string }>((resolve) => { resolveDraft = resolve; })
+      () =>
+        new Promise<{ kind: 'ok'; text: string }>((resolve) => {
+          resolveDraft = resolve;
+        })
     );
     const summarizeEmail = vi.fn(async () => ({ kind: 'ok' as const, text: 'SUMMARY' }));
     const fakeAi = { draftReply, summarizeEmail };

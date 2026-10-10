@@ -66,7 +66,7 @@ export class WelcomeView extends BoxRenderable {
     const accounts = selectors.accounts;
     if (accounts.length === 0) {
       this.subtitle.content =
-        'No accounts configured. Add an account to config.json, then press \'r\' to sync.';
+        "No accounts configured. Add an account to config.json, then press 'r' to sync.";
     } else if (folder) {
       // Folder names come from the IMAP server: sanitize before display.
       this.subtitle.content = `No emails in ${sanitizeForTerminal(folder.name)} yet`;

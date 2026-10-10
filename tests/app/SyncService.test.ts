@@ -7,20 +7,20 @@
  * exercised end-to-end.
  */
 
-import { existsSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { type ImapServiceFactory, SyncService } from '../../src/app/services/SyncService.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import { MessageRepository } from '../../src/core/database/MessageRepository.js';
-import type { AccountConfig } from '../../src/core/types/config.js';
-import { AuthenticationError, NetworkError } from '../../src/core/utils/errors.js';
 import type { ImapService } from '../../src/core/imap/ImapService.js';
 import type { FolderSyncResult, SyncFolder } from '../../src/core/imap/folders.js';
 import type { MessageSyncResult, SyncMessage } from '../../src/core/imap/types.js';
-import { SyncService, type ImapServiceFactory } from '../../src/app/services/SyncService.js';
+import type { AccountConfig } from '../../src/core/types/config.js';
 import type { AppConfig } from '../../src/core/types/config.js';
+import { AuthenticationError, NetworkError } from '../../src/core/utils/errors.js';
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -311,9 +311,7 @@ describe('SyncService', () => {
       skipped: 0,
     } satisfies FolderSyncResult);
     fake.syncMessages.mockRejectedValueOnce(new Error('fetch exploded'));
-    await expect(service.syncAccountFolder(baseAccount, 'INBOX')).rejects.toThrow(
-      'fetch exploded'
-    );
+    await expect(service.syncAccountFolder(baseAccount, 'INBOX')).rejects.toThrow('fetch exploded');
 
     const configStore = getConfigStore(testConfigPath);
     const repository = new MessageRepository(getDatabase(configStore.getConfig()));

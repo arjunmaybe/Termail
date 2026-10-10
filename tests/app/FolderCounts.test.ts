@@ -13,7 +13,7 @@
 import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type CliRenderer } from '@opentui/core';
+import type { CliRenderer } from '@opentui/core';
 import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FolderTabs } from '../../src/app/components/FolderTabs.js';
@@ -21,12 +21,12 @@ import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigSt
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import { MessageRepository } from '../../src/core/database/MessageRepository.js';
 import type { SafeAccountInput } from '../../src/core/database/MessageRepository.js';
-import { actions } from '../../src/core/state/AppState.js';
-import type { Folder } from '../../src/core/types/index.js';
 import type { PersistedEmail } from '../../src/core/database/index.js';
 import type { SyncFolder } from '../../src/core/imap/folders.js';
 import type { SyncMessage } from '../../src/core/imap/types.js';
+import { actions } from '../../src/core/state/AppState.js';
 import type { AppConfig } from '../../src/core/types/config.js';
+import type { Folder } from '../../src/core/types/index.js';
 
 const workAccount: SafeAccountInput = {
   id: 'work',
@@ -127,7 +127,9 @@ function toFolderProjection(p: {
 }
 
 function tabContent(tabs: FolderTabs, folderId: string): string | null {
-  const child = tabs.getChildren().find((c) => (c as { id?: string }).id === `folder-tab-${folderId}`) as
+  const child = tabs
+    .getChildren()
+    .find((c) => (c as { id?: string }).id === `folder-tab-${folderId}`) as
     | { content?: { chunks?: Array<{ text?: string }> } }
     | undefined;
   if (!child?.content?.chunks) return null;

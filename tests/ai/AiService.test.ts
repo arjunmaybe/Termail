@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AiService } from '../../src/core/ai/AiService.js';
 import type { AiEmailInput, AiProvider } from '../../src/core/ai/types.js';
-import { DEFAULT_AI_CONFIG, type AiConfig } from '../../src/core/types/config.js';
+import { type AiConfig, DEFAULT_AI_CONFIG } from '../../src/core/types/config.js';
 import { AuthenticationError, NetworkError } from '../../src/core/utils/errors.js';
 
 const DUMMY_KEY = 'test-ai-key-123';

@@ -55,27 +55,23 @@ export class FolderTabs extends BoxRenderable {
       this.placeholder.visible = true;
       this.placeholder.content = 'No folders';
       // Remove any dynamic children
-      this.getChildren()
-        .slice()
-        .forEach((c) => {
-          if (c.id !== 'folder-tabs-placeholder') {
-            this.remove(c);
-            c.destroy();
-          }
-        });
+      for (const c of this.getChildren().slice()) {
+        if (c.id !== 'folder-tabs-placeholder') {
+          this.remove(c);
+          c.destroy();
+        }
+      }
       return;
     }
 
     this.placeholder.visible = false;
     // Drop dynamic children, keep placeholder
-    this.getChildren()
-      .slice()
-      .forEach((c) => {
-        if (c.id !== 'folder-tabs-placeholder') {
-          this.remove(c);
-          c.destroy();
-        }
-      });
+    for (const c of this.getChildren().slice()) {
+      if (c.id !== 'folder-tabs-placeholder') {
+        this.remove(c);
+        c.destroy();
+      }
+    }
 
     for (const folder of folders) {
       const isActive = folder.id === currentFolderId;

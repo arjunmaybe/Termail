@@ -5,16 +5,16 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { AccountConfig } from '../../src/core/types/config.js';
-import { AuthenticationError, NetworkError } from '../../src/core/utils/errors.js';
 import {
+  type LineSocket,
   NodeSmtpTransport,
   buildImplicitTlsOptions,
   buildStarttlsUpgradeOptions,
   parseCapabilities,
   parseSmtpBuffer,
-  type LineSocket,
 } from '../../src/core/smtp/transport.js';
+import type { AccountConfig } from '../../src/core/types/config.js';
+import { AuthenticationError, NetworkError } from '../../src/core/utils/errors.js';
 
 const DUMMY_USER = 'me@example.com';
 const DUMMY_SECRET = 'dummy-password-123';
@@ -118,10 +118,10 @@ describe('parseSmtpBuffer (multiline)', () => {
 describe('TLS option hardening', () => {
   it('always sets rejectUnauthorized:true and servername==host (implicit)', () => {
     const opts = buildImplicitTlsOptions('smtp.example.com', 465) as Record<string, unknown>;
-    expect(opts['rejectUnauthorized']).toBe(true);
-    expect(opts['servername']).toBe('smtp.example.com');
-    expect(opts['host']).toBe('smtp.example.com');
-    expect(opts['port']).toBe(465);
+    expect(opts.rejectUnauthorized).toBe(true);
+    expect(opts.servername).toBe('smtp.example.com');
+    expect(opts.host).toBe('smtp.example.com');
+    expect(opts.port).toBe(465);
   });
 
   it('always sets rejectUnauthorized:true and servername==host (starttls upgrade)', () => {
@@ -130,8 +130,8 @@ describe('TLS option hardening', () => {
       string,
       unknown
     >;
-    expect(opts['rejectUnauthorized']).toBe(true);
-    expect(opts['servername']).toBe('smtp.example.com');
+    expect(opts.rejectUnauthorized).toBe(true);
+    expect(opts.servername).toBe('smtp.example.com');
   });
 });
 
@@ -321,7 +321,14 @@ describe('starttls happy path', () => {
       hooks,
     });
     await expect(
-      transport.send({ from: DUMMY_USER, to: ['a@example.com'], cc: [], bcc: [], subject: 's', body: 'b' })
+      transport.send({
+        from: DUMMY_USER,
+        to: ['a@example.com'],
+        cc: [],
+        bcc: [],
+        subject: 's',
+        body: 'b',
+      })
     ).rejects.toBeInstanceOf(NetworkError);
     const all = sock.written.join('');
     expect(all).not.toMatch(/AUTH|MAIL FROM|RCPT TO|DATA/);
@@ -427,7 +434,14 @@ describe('failures', () => {
       hooks: { connectTls: async () => sock } as any,
     });
     await expect(
-      transport.send({ from: DUMMY_USER, to: ['a@example.com'], cc: [], bcc: [], subject: 's', body: 'b' })
+      transport.send({
+        from: DUMMY_USER,
+        to: ['a@example.com'],
+        cc: [],
+        bcc: [],
+        subject: 's',
+        body: 'b',
+      })
     ).rejects.toBeInstanceOf(NetworkError);
   });
 
@@ -469,7 +483,14 @@ describe('failures', () => {
       hooks: { connectTls: async () => sock } as any,
     });
     await expect(
-      transport.send({ from: DUMMY_USER, to: ['a@example.com'], cc: [], bcc: [], subject: 's', body: 'b' })
+      transport.send({
+        from: DUMMY_USER,
+        to: ['a@example.com'],
+        cc: [],
+        bcc: [],
+        subject: 's',
+        body: 'b',
+      })
     ).rejects.toThrow();
     await tick();
     expect(sock.destroyed).toBe(true);

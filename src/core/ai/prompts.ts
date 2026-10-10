@@ -29,7 +29,10 @@ export function renderEmailForAi(email: AiEmailInput, maxBodyChars: number): str
 }
 
 /** Build a summarization request for one email. */
-export function buildSummarizePrompt(email: AiEmailInput, maxBodyChars: number): AiCompletionRequest {
+export function buildSummarizePrompt(
+  email: AiEmailInput,
+  maxBodyChars: number
+): AiCompletionRequest {
   return {
     system:
       'You summarize emails for a terminal email client. ' +

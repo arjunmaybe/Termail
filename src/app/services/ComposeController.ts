@@ -11,7 +11,7 @@
  *   - No drafts persistence, no Sent-folder writes, no background sending.
  */
 
-import { SmtpService, type SendOutcome } from '../../core/smtp/SmtpService.js';
+import type { SendOutcome, SmtpService } from '../../core/smtp/SmtpService.js';
 import { actions, selectors } from '../../core/state/AppState.js';
 import type { AccountConfig } from '../../core/types/config.js';
 import { logger } from '../../core/utils/logger.js';

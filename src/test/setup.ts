@@ -5,10 +5,9 @@
 import { afterAll, beforeAll, vi } from 'vitest';
 import { resetConfigStore } from '../core/config/ConfigStore.js';
 import { resetDatabase } from '../core/database/Database.js';
-import { logger, setLogLevel, setTestMode } from '../core/utils/logger.js';
+import { logger, setLogLevel } from '../core/utils/logger.js';
 
-// Enable test mode for logger
-setTestMode(true);
+// Silence non-error logs in tests
 setLogLevel('error');
 
 // Reset singletons before each test

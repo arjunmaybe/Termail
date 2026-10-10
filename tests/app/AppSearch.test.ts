@@ -10,19 +10,22 @@
  * covered by the dedicated end-to-end test for the TUI.
  */
 
-import { existsSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { App } from '../../src/app/App.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import { MessageRepository } from '../../src/core/database/MessageRepository.js';
-import type { PersistedEmail, SafeAccountInput } from '../../src/core/database/MessageRepository.js';
-import { actions, selectors } from '../../src/core/state/AppState.js';
-import type { ParseIssue } from '../../src/core/search/SearchQueryParser.js';
+import type {
+  PersistedEmail,
+  SafeAccountInput,
+} from '../../src/core/database/MessageRepository.js';
 import type { SyncFolder } from '../../src/core/imap/folders.js';
 import type { SyncMessage } from '../../src/core/imap/types.js';
+import type { ParseIssue } from '../../src/core/search/SearchQueryParser.js';
+import { actions, selectors } from '../../src/core/state/AppState.js';
 import type { AccountConfig, AppConfig } from '../../src/core/types/config.js';
 import type { Account } from '../../src/core/types/index.js';
 
@@ -87,10 +90,16 @@ function makeMessage(over: Partial<SyncMessage> = {}): SyncMessage {
   };
 }
 
-async function makeApp(): Promise<{ app: App; renderer: Awaited<ReturnType<typeof import('@opentui/core/testing').createTestRenderer>>['renderer'] }> {
+async function makeApp(): Promise<{
+  app: App;
+  renderer: Awaited<
+    ReturnType<typeof import('@opentui/core/testing').createTestRenderer>
+  >['renderer'];
+}> {
   const configStore = getConfigStore();
   const config = configStore.getConfig();
-  const database = getDatabase(config);
+  // Initialize the database singleton for the App under test.
+  getDatabase(config);
 
   const rendererMod = await import('@opentui/core/testing');
   const { renderer } = await rendererMod.createTestRenderer({

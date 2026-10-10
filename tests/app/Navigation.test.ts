@@ -9,11 +9,11 @@
  * - Empty lists are no-ops.
  */
 
-import { type CliRenderer } from '@opentui/core';
-import { createTestRenderer } from '@opentui/core/testing';
 import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { CliRenderer } from '@opentui/core';
+import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { App } from '../../src/app/App.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
@@ -89,10 +89,10 @@ describe('App keyboard navigation', () => {
       `INSERT INTO accounts (id, name, type, email, use_tls, auth_type) VALUES (?, ?, 'imap', ?, 1, 'password')`
     ).run('work', 'Work', 'me@example.com');
     db.query(
-      `INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, ?, ?, ?, ?)`
+      'INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, ?, ?, ?, ?)'
     ).run('work:INBOX', 'work', 'INBOX', 'INBOX', 'inbox', '/');
     db.query(
-      `INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, ?, ?, ?, ?)`
+      'INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, ?, ?, ?, ?)'
     ).run('work:Sent', 'work', 'Sent', 'Sent', 'sent', '/');
 
     renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;

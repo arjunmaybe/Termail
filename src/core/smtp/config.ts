@@ -12,8 +12,8 @@
  * opened. Port is validated as an integer in 1..65535.
  */
 
-import { NetworkError } from '../utils/errors.js';
 import type { AccountConfig, SmtpMode } from '../types/config.js';
+import { NetworkError } from '../utils/errors.js';
 import type { ResolvedSmtpConfig } from './types.js';
 
 export function resolveSmtpMode(input: {
@@ -46,5 +46,9 @@ export function resolveSmtpConfig(account: AccountConfig): ResolvedSmtpConfig {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new NetworkError(`Account "${account.id}" has an invalid SMTP port "${port}".`);
   }
-  return { host, port, mode: resolveSmtpMode({ smtpPort: account.smtpPort, smtpMode: account.smtpMode }) };
+  return {
+    host,
+    port,
+    mode: resolveSmtpMode({ smtpPort: account.smtpPort, smtpMode: account.smtpMode }),
+  };
 }

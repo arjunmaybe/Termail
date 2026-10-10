@@ -14,8 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import { actions, selectors } from '../../src/core/state/AppState.js';
-import { AuthenticationError } from '../../src/core/utils/errors.js';
 import type { AccountConfig, AppConfig } from '../../src/core/types/config.js';
+import { AuthenticationError } from '../../src/core/utils/errors.js';
 
 function makeAccountConfig(): AccountConfig {
   return {
@@ -52,7 +52,7 @@ describe('App.requestSync thrown auth mapping', () => {
       `INSERT INTO accounts (id, name, type, email, use_tls, auth_type) VALUES (?, ?, 'imap', ?, 1, 'password')`
     ).run('work', 'Work', 'me@example.com');
     db.query(
-      `INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, ?, ?, ?, ?)`
+      'INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, ?, ?, ?, ?)'
     ).run('work:INBOX', 'work', 'INBOX', 'INBOX', 'inbox', '/');
   });
 
@@ -67,9 +67,11 @@ describe('App.requestSync thrown auth mapping', () => {
 
   async function makeApp(fake: { syncAccountFolder: ReturnType<typeof vi.fn> }) {
     const { App } = await import('../../src/app/App.js');
-    const renderer = (await import('@opentui/core/testing').then((m) =>
-      m.createTestRenderer({ width: 120, height: 40 })
-    )).renderer;
+    const renderer = (
+      await import('@opentui/core/testing').then((m) =>
+        m.createTestRenderer({ width: 120, height: 40 })
+      )
+    ).renderer;
     try {
       const app = new App(renderer, {
         id: 'app-autht',

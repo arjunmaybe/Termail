@@ -11,10 +11,6 @@
  *   persisted to SQLite. Reply drafts go to the compose buffer for review.
  */
 
-import { resolveAiApiKey } from './credentials.js';
-import { OpenRouterTransport, type FetchFn } from './OpenRouterTransport.js';
-import { buildDraftReplyPrompt, buildSummarizePrompt } from './prompts.js';
-import type { AiEmailInput, AiOutcome, AiProviderFactory } from './types.js';
 import type { AiConfig } from '../types/config.js';
 import {
   AuthenticationError,
@@ -23,6 +19,10 @@ import {
   getErrorMessage,
 } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
+import { type FetchFn, OpenRouterTransport } from './OpenRouterTransport.js';
+import { resolveAiApiKey } from './credentials.js';
+import { buildDraftReplyPrompt, buildSummarizePrompt } from './prompts.js';
+import type { AiEmailInput, AiOutcome, AiProviderFactory } from './types.js';
 
 const defaultFactory: AiProviderFactory = (args) =>
   new OpenRouterTransport({
@@ -93,7 +93,10 @@ export class AiService {
 
   private checkHasContent(email: AiEmailInput): AiOutcome | null {
     if (email.subject.trim().length === 0 && email.body.trim().length === 0) {
-      return { kind: 'validation', message: 'Nothing to process: the email has no subject or body' };
+      return {
+        kind: 'validation',
+        message: 'Nothing to process: the email has no subject or body',
+      };
     }
     return null;
   }

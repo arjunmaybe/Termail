@@ -6,10 +6,9 @@
  * fake factory used in Phase 2.1.
  */
 
+import type { ImapFlow } from 'imapflow';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ImapFlow } from 'imapflow';
-import type { AccountConfig } from '../../src/core/types/config.js';
-import { NetworkError } from '../../src/core/utils/errors.js';
+import { ImapService } from '../../src/core/imap/ImapService.js';
 import {
   type FolderSyncResult,
   type SyncFolder,
@@ -18,8 +17,9 @@ import {
   normalizeMailboxEntry,
   syncMailboxes,
 } from '../../src/core/imap/folders.js';
-import { ImapService } from '../../src/core/imap/ImapService.js';
 import type { ImapFlowFactory } from '../../src/core/imap/types.js';
+import type { AccountConfig } from '../../src/core/types/config.js';
+import { NetworkError } from '../../src/core/utils/errors.js';
 
 const baseAccount: AccountConfig = {
   id: 'work',
@@ -101,15 +101,15 @@ describe('classifyType', () => {
   });
 
   it('classifies junk as spam', () => {
-    expect(
-      classifyType({ path: 'Junk', displayName: 'Junk', flags: [], specialUse: 'junk' })
-    ).toBe('spam');
+    expect(classifyType({ path: 'Junk', displayName: 'Junk', flags: [], specialUse: 'junk' })).toBe(
+      'spam'
+    );
   });
 
   it('classifies spam as spam', () => {
-    expect(
-      classifyType({ path: 'Spam', displayName: 'Spam', flags: [], specialUse: 'spam' })
-    ).toBe('spam');
+    expect(classifyType({ path: 'Spam', displayName: 'Spam', flags: [], specialUse: 'spam' })).toBe(
+      'spam'
+    );
   });
 
   it('falls back to flags when specialUse is missing', () => {
@@ -142,15 +142,15 @@ describe('classifyType', () => {
   });
 
   it('classifies INBOX by path even without special-use metadata', () => {
-    expect(
-      classifyType({ path: 'INBOX', displayName: 'INBOX', flags: [], specialUse: '' })
-    ).toBe('inbox');
+    expect(classifyType({ path: 'INBOX', displayName: 'INBOX', flags: [], specialUse: '' })).toBe(
+      'inbox'
+    );
   });
 
   it('classifies "inbox" by path (lowercase) as inbox', () => {
-    expect(
-      classifyType({ path: 'inbox', displayName: 'inbox', flags: [], specialUse: '' })
-    ).toBe('inbox');
+    expect(classifyType({ path: 'inbox', displayName: 'inbox', flags: [], specialUse: '' })).toBe(
+      'inbox'
+    );
   });
 
   it('returns custom for unrecognized folders', () => {
@@ -187,7 +187,11 @@ describe('normalizeMailboxEntry', () => {
   });
 
   it('handles non-/ delimiters (e.g. "." used by some servers)', () => {
-    const folder = normalizeMailboxEntry({ path: 'INBOX.Projects.2026', delimiter: '.', flags: [] });
+    const folder = normalizeMailboxEntry({
+      path: 'INBOX.Projects.2026',
+      delimiter: '.',
+      flags: [],
+    });
     expect(folder.displayName).toBe('2026');
     expect(folder.parentPath).toBe('INBOX.Projects');
     expect(folder.depth).toBe(2);
@@ -446,12 +450,10 @@ describe('ImapService.syncFolders', () => {
 
   it('does not leak credentials into a thrown error message', async () => {
     fake.list.mockRejectedValueOnce(new Error('list failed: super-secret is bad'));
-    const caught = await service
-      .syncFolders()
-      .then(
-        () => new Error('expected throw'),
-        (e: unknown) => e as Error
-      );
+    const caught = await service.syncFolders().then(
+      () => new Error('expected throw'),
+      (e: unknown) => e as Error
+    );
     expect(caught.message).toMatch(/list failed: \*\*\* is bad/);
     expect(caught.message).not.toContain('super-secret');
   });

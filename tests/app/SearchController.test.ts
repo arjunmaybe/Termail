@@ -22,11 +22,14 @@ import { SearchController } from '../../src/app/services/SearchController.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import { MessageRepository } from '../../src/core/database/MessageRepository.js';
-import type { PersistedEmail, SafeAccountInput } from '../../src/core/database/MessageRepository.js';
-import { actions, selectors } from '../../src/core/state/AppState.js';
-import type { ParseIssue } from '../../src/core/search/SearchQueryParser.js';
+import type {
+  PersistedEmail,
+  SafeAccountInput,
+} from '../../src/core/database/MessageRepository.js';
 import type { SyncFolder } from '../../src/core/imap/folders.js';
 import type { SyncMessage } from '../../src/core/imap/types.js';
+import type { ParseIssue } from '../../src/core/search/SearchQueryParser.js';
+import { actions, selectors } from '../../src/core/state/AppState.js';
 import type { AppConfig } from '../../src/core/types/config.js';
 
 const baseAccount: SafeAccountInput = {
