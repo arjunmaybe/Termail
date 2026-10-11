@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**/*.ts", "**/*.json", "!website/.astro"]
+    "includes": ["**/*.ts", "**/*.json"]
   },
   "formatter": {
     "enabled": true,
