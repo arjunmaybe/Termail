@@ -17,6 +17,7 @@ import { logger } from '../core/utils/logger.js';
 import { sanitizeForTerminal } from '../core/utils/terminal.js';
 import { SearchInputBar } from './components/SearchInputBar.js';
 import { ContentPane } from './layout/ContentPane.js';
+import { Header } from './layout/Header.js';
 import { Sidebar } from './layout/Sidebar.js';
 import { StatusBar } from './layout/StatusBar.js';
 import { AiController } from './services/AiController.js';
@@ -39,6 +40,8 @@ export interface AppOptions {
 export class App extends BoxRenderable {
   private theme: Theme;
   private themeMode: 'dark' | 'light';
+  private header: Header;
+  private mainRow: BoxRenderable;
   private sidebar: Sidebar;
   private content: ContentPane;
   private statusBar: StatusBar;
@@ -91,9 +94,19 @@ export class App extends BoxRenderable {
       height: 1,
     });
 
-    // Main three-pane layout: sidebar + content + status bar.
-    // The `searchInputBar` is a one-line strip above the status bar;
-    // it is hidden by default and shown only when search is active.
+    // Main layout: a header strip on top, then a horizontal row with the
+    // folder sidebar on the left and the content region filling the rest,
+    // then the search bar and status bar at the bottom. Sidebar and content
+    // share the same vertical region side by side (the sidebar used to be
+    // stacked above the content, pushing the email list down).
+    this.header = new Header(ctx, { id: 'app-header', themeMode: this.themeMode });
+    this.mainRow = new BoxRenderable(ctx, {
+      id: 'main-row',
+      flexDirection: 'row',
+      width: '100%',
+      flexGrow: 1,
+      backgroundColor: this.theme.background,
+    });
     this.sidebar = new Sidebar(ctx, { id: 'sidebar', themeMode: this.themeMode });
     this.content = new ContentPane(ctx, { id: 'content-pane', themeMode: this.themeMode });
     this.statusBar = new StatusBar(ctx, { id: 'status-bar', themeMode: this.themeMode });
@@ -104,14 +117,18 @@ export class App extends BoxRenderable {
 
     this.sidebar.visible = false;
     this.content.visible = false;
+    this.header.visible = false;
+    this.mainRow.visible = false;
     this.statusBar.visible = false;
     this.searchInputBar.visible = false;
     this.errorBanner.visible = false;
 
     this.add(this.banner);
     this.add(this.errorBanner);
-    this.add(this.sidebar);
-    this.add(this.content);
+    this.add(this.header);
+    this.mainRow.add(this.sidebar);
+    this.mainRow.add(this.content);
+    this.add(this.mainRow);
     this.add(this.searchInputBar);
     this.add(this.statusBar);
 
@@ -194,6 +211,8 @@ export class App extends BoxRenderable {
 
       this.initialized = true;
       this.banner.visible = false;
+      this.header.visible = true;
+      this.mainRow.visible = true;
       this.sidebar.visible = true;
       this.content.visible = true;
       this.statusBar.visible = true;
@@ -218,6 +237,8 @@ export class App extends BoxRenderable {
   private applyTheme(theme: Theme): void {
     this.theme = theme;
     this.backgroundColor = theme.background;
+    this.mainRow.backgroundColor = theme.background;
+    this.header.setTheme(theme);
     this.sidebar.setTheme(theme);
     this.content.setTheme(theme);
     this.statusBar.setTheme(theme);
@@ -505,10 +526,69 @@ export class App extends BoxRenderable {
     if (target) actions.setCurrentFolder(target.id);
   }
 
-  /** Clear the email selection and return to the list view. */
+  /**
+   * Open the highlighted email in the reading/detail view. Never advances
+   * to a different email: when a visible email is already highlighted it
+   * opens exactly that one. When nothing is highlighted, the first visible
+   * email is highlighted and opened. No-op on an empty visible list.
+   */
+  openSelectedEmail(): void {
+    const visible = selectors.searchActive ? (selectors.searchHits ?? []) : selectors.emails;
+    if (visible.length === 0) return;
+    const currentId = selectors.selectedEmailId;
+    if (currentId && visible.some((e) => e.id === currentId)) {
+      actions.setOpenedEmail(currentId);
+      return;
+    }
+    const first = visible[0];
+    if (first) {
+      actions.setSelectedEmail(first.id);
+      actions.setOpenedEmail(first.id);
+    }
+  }
+
+  /**
+   * Close the reading/detail view and return to the email list. The
+   * highlight is preserved so the user lands back on the same email.
+   */
+  closeOpenedEmail(): void {
+    if (selectors.openedEmailId !== null) {
+      actions.setOpenedEmail(null);
+    }
+  }
+
+  /** True while the reading/detail view is actually shown. */
+  isReadingViewOpen(): boolean {
+    return selectors.openedEmailId !== null && this.content.isShowingDetail();
+  }
+
+  /**
+   * Scroll the open message by rows. List selection and the open email
+   * are untouched.
+   */
+  scrollReadingView(delta: 1 | -1): void {
+    this.content.scrollDetailByRows(delta);
+  }
+
+  /**
+   * Scroll the open message by viewports. List selection and the open
+   * email are untouched.
+   */
+  scrollReadingViewPage(delta: 1 | -1): void {
+    this.content.scrollDetailByViewport(delta);
+  }
+
+  /**
+   * Clear both the highlight and any open-email state (e.g. the list was
+   * invalidated). Prefer `closeOpenedEmail` for Escape, which preserves
+   * the highlight.
+   */
   clearEmailSelection(): void {
     if (selectors.selectedEmailId !== null) {
       actions.setSelectedEmail(null);
+    }
+    if (selectors.openedEmailId !== null) {
+      actions.setOpenedEmail(null);
     }
   }
 
@@ -536,6 +616,9 @@ export class App extends BoxRenderable {
   }
   getSidebar(): Sidebar {
     return this.sidebar;
+  }
+  getHeader(): Header {
+    return this.header;
   }
   getContent(): ContentPane {
     return this.content;
@@ -698,6 +781,7 @@ export class App extends BoxRenderable {
    * Not normally called by `main.ts`; that path exits the process.
    */
   override destroy(): void {
+    this.header.destroy();
     this.sidebar.destroy();
     this.content.destroy();
     this.statusBar.destroy();

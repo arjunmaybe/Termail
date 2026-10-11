@@ -43,6 +43,10 @@ export function getEnvSecretName(account: AccountConfig): string {
 /**
  * Resolve credentials from the environment. Throws `AuthenticationError`
  * with a non-secret message if the variable is missing or empty.
+ *
+ * The message is intentionally short: sync errors surface in the one-line
+ * status bar, which shows only the first 80 characters, so the exact env
+ * var name must fit inside that budget to stay actionable.
  */
 export function resolveCredentials(
   account: AccountConfig,
@@ -54,7 +58,7 @@ export function resolveCredentials(
   if (typeof value !== 'string' || value.length === 0) {
     throw new AuthenticationError(
       `Missing ${account.authType === 'oauth2' ? 'OAuth2 token' : 'password'} for account "${account.id}". ` +
-        `Set the ${envName} environment variable.`
+        `Set ${envName} env var.`
     );
   }
 

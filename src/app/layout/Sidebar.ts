@@ -31,8 +31,10 @@ export class Sidebar extends BoxRenderable {
     super(ctx, {
       id: options.id ?? 'sidebar',
       flexDirection: 'column',
-      width: '30%',
-      minWidth: 20,
+      // Fixed width: the sidebar shares a horizontal row with the content
+      // region, so a stable width keeps folder rows and the right boundary
+      // aligned at every terminal size.
+      width: 24,
       height: '100%',
       backgroundColor: theme.surface,
       borderStyle: 'single',
@@ -116,7 +118,7 @@ export class Sidebar extends BoxRenderable {
       this.remove(this.footer);
       this.add(this.collapsedLabel);
     } else {
-      this.width = '30%';
+      this.width = 24;
       this.collapsedLabel.visible = false;
       this.remove(this.collapsedLabel);
       this.header.visible = true;

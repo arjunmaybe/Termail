@@ -20,7 +20,18 @@ export interface AppState {
   // and headers, so the detail view reads from this list directly without
   // a separate findById() call.
   emails: PersistedEmail[];
+  /**
+   * Highlighted email in the list. `j`/`k` move this; the list stays
+   * visible. Highlighting never opens the reading view on its own.
+   */
   selectedEmailId: string | null;
+  /**
+   * Email shown in the reading/detail view. Set only by an explicit
+   * open (Enter), cleared by Escape (which preserves the highlight)
+   * or by anything that invalidates the list (folder/account switch,
+   * email reload). `null` means the list is shown.
+   */
+  openedEmailId: string | null;
 
   // UI state
   sidebarCollapsed: boolean;
@@ -104,6 +115,7 @@ const _folders = signal<Folder[]>([]);
 const _currentFolderId = signal<string | null>(null);
 const _emails = signal<PersistedEmail[]>([]);
 const _selectedEmailId = signal<string | null>(null);
+const _openedEmailId = signal<string | null>(null);
 const _sidebarCollapsed = signal<boolean>(false);
 const _paneRatio = signal<number>(0.3);
 const _syncStatus = signal<'idle' | 'syncing' | 'error' | 'success'>('idle');
@@ -152,6 +164,12 @@ const currentFolder = computed(() => {
 const selectedEmail = computed(() => {
   const id = _selectedEmailId.value;
   return id ? _emails.value.find((e) => e.id === id) || null : null;
+});
+
+const openedEmail = computed(() => {
+  const id = _openedEmailId.value;
+  if (!id) return null;
+  return _emails.value.find((e) => e.id === id) || null;
 });
 
 const unreadCount = computed(() => {
@@ -221,6 +239,7 @@ export const actions = {
       // Reset folder/email selection when switching accounts
       _currentFolderId.value = null;
       _selectedEmailId.value = null;
+      _openedEmailId.value = null;
       _emails.value = [];
     }
   },
@@ -258,6 +277,7 @@ export const actions = {
   setCurrentFolder(folderId: string | null) {
     _currentFolderId.value = folderId;
     _selectedEmailId.value = null;
+    _openedEmailId.value = null;
   },
 
   addFolder(folder: Folder) {
@@ -279,6 +299,7 @@ export const actions = {
   setEmails(emails: PersistedEmail[]) {
     _emails.value = emails;
     _selectedEmailId.value = null;
+    _openedEmailId.value = null;
   },
 
   addEmails(emails: PersistedEmail[]) {
@@ -308,10 +329,17 @@ export const actions = {
     if (_selectedEmailId.value === emailId) {
       _selectedEmailId.value = _emails.value[0]?.id || null;
     }
+    if (_openedEmailId.value === emailId) {
+      _openedEmailId.value = null;
+    }
   },
 
   setSelectedEmail(emailId: string | null) {
     _selectedEmailId.value = emailId;
+  },
+
+  setOpenedEmail(emailId: string | null) {
+    _openedEmailId.value = emailId;
   },
 
   markAsRead(emailId: string) {
@@ -512,6 +540,7 @@ export const actions = {
     _currentFolderId.value = null;
     _emails.value = [];
     _selectedEmailId.value = null;
+    _openedEmailId.value = null;
     _sidebarCollapsed.value = false;
     _syncStatus.value = 'idle';
     _syncError.value = null;
@@ -572,6 +601,12 @@ export const selectors = {
   },
   get selectedEmail() {
     return selectedEmail.value;
+  },
+  get openedEmailId() {
+    return _openedEmailId.value;
+  },
+  get openedEmail() {
+    return openedEmail.value;
   },
   get unreadCount() {
     return unreadCount.value;
@@ -680,6 +715,7 @@ export function subscribe(fn: (state: AppState) => void): () => void {
     _currentFolderId,
     _emails,
     _selectedEmailId,
+    _openedEmailId,
     _sidebarCollapsed,
     _paneRatio,
     _syncStatus,

@@ -2,9 +2,12 @@
  * Keyboard-first navigation: email and folder selection.
  *
  * Covers the MVP TUI contract:
- * - j/k (delta +1/-1) moves the email selection, clamped at the ends.
- * - h/l moves the folder selection, clearing any stale email selection.
- * - Esc (clearEmailSelection) returns to the list view.
+ * - j/k (delta +1/-1) moves the email highlight, clamped at the ends,
+ *   without opening the reading view.
+ * - Enter (openSelectedEmail) opens the highlighted email; Escape
+ *   (closeOpenedEmail) returns to the list preserving the highlight.
+ * - h/l moves the folder selection, clearing any stale email selection
+ *   and any open-email state.
  * - Navigation respects the search-active visible list.
  * - Empty lists are no-ops.
  */
@@ -151,25 +154,54 @@ describe('App keyboard navigation', () => {
     expect(selectors.selectedEmailId).toBe('a');
   });
 
-  it('clearEmailSelection returns to the list view', () => {
+  it('j/k move the highlight without opening the reading view', () => {
+    actions.setEmails([makeEmail('a', 'A'), makeEmail('b', 'B')]);
+    expect(selectors.selectedEmailId).toBeNull();
+    expect(selectors.openedEmailId).toBeNull();
+    app!.moveEmailSelection(1);
+    expect(selectors.selectedEmailId).toBe('a');
+    expect(selectors.openedEmailId).toBeNull();
+    app!.moveEmailSelection(1);
+    expect(selectors.selectedEmailId).toBe('b');
+    expect(selectors.openedEmailId).toBeNull();
+  });
+
+  it('openSelectedEmail opens the highlight; closeOpenedEmail preserves it', () => {
     actions.setEmails([makeEmail('a', 'A')]);
     app!.moveEmailSelection(1);
     expect(selectors.selectedEmailId).toBe('a');
-    app!.clearEmailSelection();
-    expect(selectors.selectedEmailId).toBeNull();
-    // Second clear is a no-op.
-    app!.clearEmailSelection();
-    expect(selectors.selectedEmailId).toBeNull();
+    app!.openSelectedEmail();
+    expect(selectors.openedEmailId).toBe('a');
+    app!.closeOpenedEmail();
+    expect(selectors.openedEmailId).toBeNull();
+    expect(selectors.selectedEmailId).toBe('a');
+    // Second close is a no-op.
+    app!.closeOpenedEmail();
+    expect(selectors.selectedEmailId).toBe('a');
   });
 
-  it('h/l moves folders and clears stale email selection', () => {
+  it('clearEmailSelection clears both highlight and open state', () => {
+    actions.setEmails([makeEmail('a', 'A')]);
+    app!.moveEmailSelection(1);
+    app!.openSelectedEmail();
+    expect(selectors.selectedEmailId).toBe('a');
+    expect(selectors.openedEmailId).toBe('a');
+    app!.clearEmailSelection();
+    expect(selectors.selectedEmailId).toBeNull();
+    expect(selectors.openedEmailId).toBeNull();
+  });
+
+  it('h/l moves folders and clears stale email selection and open state', () => {
     expect(selectors.currentFolderId).toBe('work:INBOX');
     actions.setEmails([makeEmail('a', 'A')]);
     app!.moveEmailSelection(1);
+    app!.openSelectedEmail();
     expect(selectors.selectedEmailId).toBe('a');
+    expect(selectors.openedEmailId).toBe('a');
     app!.moveFolderSelection(1);
     expect(selectors.currentFolderId).toBe('work:Sent');
     expect(selectors.selectedEmailId).toBeNull();
+    expect(selectors.openedEmailId).toBeNull();
     app!.moveFolderSelection(-1);
     expect(selectors.currentFolderId).toBe('work:INBOX');
     // Clamped at the start.

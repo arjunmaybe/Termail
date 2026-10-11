@@ -4,6 +4,7 @@
 
 import { createCliRenderer } from '@opentui/core';
 import { App } from './app/App.js';
+import { routeKeypress } from './app/KeyRouter.js';
 import { logger } from './core/utils/logger.js';
 
 async function main(): Promise<void> {
@@ -23,91 +24,6 @@ async function main(): Promise<void> {
     // Wire app state subscription so children re-render on changes
     app.attach();
 
-    // Bind global keyboard shortcuts
-    renderer.keyInput.on('keypress', (key) => {
-      // Phase 3.3 — search-active branch. While the search input
-      // bar is open, `q` and `r` are disabled and the regular
-      // navigation keys are routed to the search controller.
-      if (app.isSearchActive()) {
-        if (key.ctrl) return; // ignore Ctrl-modified keys
-        switch (key.name) {
-          case 'escape':
-            app.cancelSearch();
-            return;
-          case 'return':
-            void app.submitSearch();
-            return;
-          case 'backspace':
-            app.popChar();
-            return;
-          case 'space':
-            app.pushChar(' ');
-            return;
-          default:
-            // Printable single character.
-            if (typeof key.name === 'string' && key.name.length === 1) {
-              app.pushChar(key.name);
-            }
-            return;
-        }
-      }
-
-      if (key.ctrl) return;
-      switch (key.name) {
-        case 'q':
-          shutdown();
-          break;
-        case 'escape':
-          // Back to the list when a message is open; otherwise no-op.
-          app.clearEmailSelection();
-          break;
-        case 'r':
-          // Phase 2.5: trigger a sync of the current account / folder.
-          // The handler lives entirely inside `App.requestSync()`; this
-          // file is intentionally the only place that owns the keypress.
-          void app.requestSync();
-          break;
-        case '/':
-        case 'slash':
-          // Phase 3.3: open the search input bar.
-          app.openSearch();
-          break;
-        case 's':
-          // Phase 5: summarize the selected email (detail pane).
-          void app.summarizeSelectedEmail();
-          break;
-        case 'd':
-          // Phase 5: draft a reply into compose for review. Never sends.
-          void app.draftReplyWithAi();
-          break;
-        case 'j':
-        case 'down':
-          app.moveEmailSelection(1);
-          break;
-        case 'k':
-        case 'up':
-          app.moveEmailSelection(-1);
-          break;
-        case 'h':
-        case 'left':
-          app.moveFolderSelection(-1);
-          break;
-        case 'l':
-        case 'right':
-          app.moveFolderSelection(1);
-          break;
-        case 'tab':
-          app.moveFolderSelection(1);
-          break;
-        case 'return':
-          // Select the first message when nothing is selected.
-          app.moveEmailSelection(1);
-          break;
-        default:
-          break;
-      }
-    });
-
     const shutdown = (): void => {
       logger.info('Shutting down...');
       if (renderer) {
@@ -120,6 +36,13 @@ async function main(): Promise<void> {
       }
       process.exit(0);
     };
+
+    // Bind global keyboard shortcuts. All key routing lives in
+    // `routeKeypress` (src/app/KeyRouter.ts) so it can be tested
+    // without a live renderer.
+    renderer.keyInput.on('keypress', (key) => {
+      routeKeypress(key, app, { onShutdown: shutdown });
+    });
 
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);

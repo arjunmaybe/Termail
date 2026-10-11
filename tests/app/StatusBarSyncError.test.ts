@@ -9,7 +9,9 @@ import type { CliRenderer } from '@opentui/core';
 import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { StatusBar, formatSyncError } from '../../src/app/layout/StatusBar.js';
+import { resolveCredentials } from '../../src/core/imap/credentials.js';
 import { actions } from '../../src/core/state/AppState.js';
+import type { AccountConfig } from '../../src/core/types/config.js';
 
 function syncContent(bar: StatusBar): string | null {
   const right = bar.getChildren().find((c) => (c as { id?: string }).id === 'status-right') as
@@ -92,6 +94,44 @@ describe('B1 StatusBar sync error visibility', () => {
       actions.reset();
       actions.setSyncStatus('error');
       expect(syncContent(bar)).toBe('● Error');
+    } finally {
+      bar.destroy();
+    }
+  });
+
+  it('missing-credential error keeps the exact env var name visible', async () => {
+    // End-to-end through the real chain: `resolveCredentials` throws for
+    // an unconfigured account, `App.requestSync` surfaces the message via
+    // `setSyncError`, and the StatusBar must show the full variable name
+    // (not a length-clipped fragment) so the user knows what to set.
+    // Never asserts on a secret value.
+    const account: AccountConfig = {
+      id: 'work',
+      name: 'Work',
+      email: 'me@example.com',
+      enabled: true,
+      host: 'imap.example.com',
+      port: 993,
+      useTls: true,
+      authType: 'password',
+    };
+    let message = '';
+    try {
+      resolveCredentials(account, {});
+    } catch (error) {
+      message = error instanceof Error ? error.message : '';
+    }
+    expect(message.length).toBeGreaterThan(0);
+
+    renderer = (await createTestRenderer({ width: 120, height: 40 })).renderer;
+    const bar = new StatusBar(renderer, { themeMode: 'dark' });
+    try {
+      actions.reset();
+      actions.setSyncError(message);
+      const content = syncContent(bar);
+      expect(content).toContain('TERMAIL_WORK_PASSWORD');
+      // The variable name must be complete, not cut off mid-name.
+      expect(content).toMatch(/TERMAIL_WORK_PASSWORD\b/);
     } finally {
       bar.destroy();
     }

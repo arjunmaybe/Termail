@@ -121,13 +121,21 @@ describe('FolderTabs', () => {
     }
   }
 
+  function tabText(node: unknown): string | null {
+    const renderable = node as { content?: { chunks?: Array<{ text?: string }> } } | undefined;
+    if (!renderable?.content?.chunks) return null;
+    return renderable.content.chunks.map((c) => c.text ?? '').join('');
+  }
+
   function tabContent(tabs: FolderTabs, folderId: string): string | null {
-    const id = `folder-tab-${folderId}`;
-    const child = tabs.getChildren().find((c) => (c as { id?: string }).id === id) as
-      | { content?: { chunks?: Array<{ text?: string }> } }
-      | undefined;
-    if (!child?.content?.chunks) return null;
-    return child.content.chunks.map((c) => c.text ?? '').join('');
+    // Each folder row keeps the name node under the legacy
+    // `folder-tab-<id>` id and the unread count under
+    // `folder-tab-count-<id>`; joining both reproduces the row label.
+    const name = tabs.findDescendantById(`folder-tab-${folderId}`);
+    if (!name) return null;
+    const nameText = tabText(name) ?? '';
+    const count = tabs.findDescendantById(`folder-tab-count-${folderId}`);
+    return nameText + (tabText(count) ?? '');
   }
 
   it('shows no count when the folder has zero unread', async () => {

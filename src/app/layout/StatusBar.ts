@@ -22,6 +22,13 @@ export class StatusBar extends BoxRenderable {
   private unreadLabel: TextRenderable;
   private syncLabel: TextRenderable;
   private unsubscribe: (() => void) | null = null;
+  /**
+   * Below this terminal width the left-side keyboard hints are hidden so
+   * the right-side status fields (Folder/Emails/Unread/sync) keep their
+   * natural width instead of being shrunk to zero. 57 cols of hints +
+   * ~40 cols of status need ~100 cols total; hide hints when narrow.
+   */
+  private static readonly NARROW_WIDTH = 90;
 
   constructor(ctx: RenderContext, options: StatusBarOptions) {
     const theme = getTheme(options.themeMode);
@@ -44,10 +51,12 @@ export class StatusBar extends BoxRenderable {
       id: 'status-left',
       flexDirection: 'row',
       flexGrow: 1,
+      flexShrink: 1,
     });
     this.rightGroup = new BoxRenderable(ctx, {
       id: 'status-right',
       flexDirection: 'row',
+      flexShrink: 0,
     });
 
     // Primary shortcuts intentionally advertised here (q, /, r, s, d).
@@ -64,21 +73,28 @@ export class StatusBar extends BoxRenderable {
       id: 'status-folder',
       content: 'Folder: None',
       fg: theme.textSecondary,
+      flexShrink: 0,
+      paddingRight: 2,
     });
     this.emailCount = new TextRenderable(ctx, {
       id: 'status-emails',
       content: 'Emails: 0',
       fg: theme.textSecondary,
+      flexShrink: 0,
+      paddingRight: 2,
     });
     this.unreadLabel = new TextRenderable(ctx, {
       id: 'status-unread',
       content: 'Unread: 0',
       fg: theme.textSecondary,
+      flexShrink: 0,
+      paddingRight: 2,
     });
     this.syncLabel = new TextRenderable(ctx, {
       id: 'status-sync',
       content: '● Idle',
       fg: theme.textMuted,
+      flexShrink: 0,
     });
 
     this.rightGroup.add(this.folderLabel);
@@ -90,7 +106,9 @@ export class StatusBar extends BoxRenderable {
     this.add(this.rightGroup);
 
     this.unsubscribe = subscribe(() => this.refresh());
+    this.onSizeChange = () => this.applyResponsive();
     this.refresh();
+    this.applyResponsive();
   }
 
   private kbdHint(ctx: RenderContext, key: string, label: string): BoxRenderable {
@@ -141,6 +159,20 @@ export class StatusBar extends BoxRenderable {
       this.syncLabel.content = '● Idle';
       this.syncLabel.fg = this.theme.textMuted;
     }
+    this.applyResponsive();
+  }
+
+  /**
+   * Narrow-terminal guard: hide the optional keyboard hints so Yoga never
+   * shrinks the status fields to zero width. The right group has
+   * `flexShrink: 0`, but without hiding the 57-col hint row a 68-col
+   * terminal still clips `Folder: <name>` to `Folder:` and drops the
+   * email/unread values. Called from `refresh()` and on resize.
+   */
+  private applyResponsive(): void {
+    const w = this.width || this.ctx.width || 0;
+    if (w <= 0) return;
+    this.leftGroup.visible = w >= StatusBar.NARROW_WIDTH;
   }
 
   setTheme(theme: Theme): void {

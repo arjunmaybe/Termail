@@ -43,6 +43,7 @@ export class ContentPane extends BoxRenderable {
   private aiHeader: TextRenderable;
   private aiBody: TextRenderable;
   private unsubscribe: (() => void) | null = null;
+  private wasDetailVisible = false;
 
   constructor(ctx: RenderContext, options: ContentPaneOptions) {
     const theme = getTheme(options.themeMode);
@@ -69,6 +70,7 @@ export class ContentPane extends BoxRenderable {
     this.emailListView = new EmailListView(ctx, {
       id: 'email-list-view',
       themeMode: this.themeMode,
+      scrollContainer: this.container,
     });
     this.detailSubject = new TextRenderable(ctx, {
       id: 'email-detail-subject',
@@ -149,6 +151,17 @@ export class ContentPane extends BoxRenderable {
     this.container.add(this.emailListView);
     this.container.add(this.emailDetail);
 
+    // Follow-up scroll after layout-driven content size changes (reveals,
+    // resizes): metrics are fresh then, unlike during state-notification
+    // rebuilds where fresh nodes have no layout yet. Chains the ScrollBox's
+    // own size handler so scrollbar bookkeeping still runs.
+    const scrollContent = this.container.content;
+    const prevOnSizeChange = scrollContent.onSizeChange;
+    scrollContent.onSizeChange = () => {
+      prevOnSizeChange?.call(scrollContent);
+      this.emailListView.ensureSelectedVisible();
+    };
+
     this.add(this.container);
 
     this.unsubscribe = subscribe(() => {
@@ -159,22 +172,62 @@ export class ContentPane extends BoxRenderable {
   }
 
   private refresh(): void {
-    const selectedId = selectors.selectedEmailId;
+    const openedId = selectors.openedEmailId;
     const currentFolder = selectors.currentFolder;
 
-    if (selectedId) {
+    let showingDetail = false;
+    if (openedId) {
       const sourceEmails = selectors.searchActive ? (selectors.searchHits ?? []) : selectors.emails;
 
-      const email = sourceEmails.find((e) => e.id === selectedId);
+      const email = sourceEmails.find((e) => e.id === openedId);
       if (email) {
         this.showDetail(email);
-        return;
+        showingDetail = true;
       }
     }
 
-    this.welcomeView.visible = !currentFolder;
-    this.emailListView.visible = !!currentFolder;
-    this.emailDetail.visible = false;
+    if (!showingDetail) {
+      this.welcomeView.visible = !currentFolder;
+      // Reveal the list (if hidden) before syncing its rows: rows rebuilt
+      // while hidden would have no layout, so the list syncs itself here,
+      // reusing frozen row geometry to restore highlight and scroll.
+      const wasListHidden = !this.emailListView.visible;
+      this.emailListView.visible = !!currentFolder;
+      this.emailDetail.visible = false;
+      if (wasListHidden && !!currentFolder) {
+        this.emailListView.refreshVisible();
+      }
+    }
+
+    if (showingDetail && !this.wasDetailVisible) {
+      // Start a freshly opened message at the top. `0` always sticks
+      // regardless of stale content metrics.
+      this.container.scrollTop = 0;
+    }
+    this.wasDetailVisible = showingDetail;
+  }
+
+  /** Whether the reading/detail view is currently shown. */
+  isShowingDetail(): boolean {
+    return this.emailDetail.visible;
+  }
+
+  /**
+   * Scroll the open message by rows. No-op unless the detail view is
+   * shown; never touches list selection or the open email.
+   */
+  scrollDetailByRows(delta: number): void {
+    if (!this.emailDetail.visible) return;
+    this.container.scrollBy(delta);
+  }
+
+  /**
+   * Scroll the open message by viewports. No-op unless the detail view is
+   * shown; never touches list selection or the open email.
+   */
+  scrollDetailByViewport(delta: number): void {
+    if (!this.emailDetail.visible) return;
+    this.container.scrollBy(delta, 'viewport');
   }
 
   private showDetail(email: PersistedEmail): void {

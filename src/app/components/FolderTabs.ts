@@ -1,5 +1,10 @@
 /**
- * Folder tabs component - horizontal tab bar for folder switching
+ * Folder list component - vertical list of folders for the sidebar.
+ *
+ * Each folder is one row: a selection marker, the folder name, and the
+ * unread count right-aligned. The active folder is highlighted; long
+ * names are clipped by the row width. Row node ids (`folder-tab-*`) are
+ * kept stable for existing tests and mouse handling.
  */
 
 import { BoxRenderable, type RenderContext, TextAttributes, TextRenderable } from '@opentui/core';
@@ -23,11 +28,12 @@ export class FolderTabs extends BoxRenderable {
     const theme = getTheme(options.themeMode);
     super(ctx, {
       id: options.id ?? 'folder-tabs',
-      flexDirection: 'row',
+      flexDirection: 'column',
       backgroundColor: theme.surface,
       width: '100%',
-      height: 1,
+      flexGrow: 1,
       paddingLeft: 1,
+      paddingRight: 1,
     });
 
     this.theme = theme;
@@ -54,26 +60,25 @@ export class FolderTabs extends BoxRenderable {
     if (folders.length === 0) {
       this.placeholder.visible = true;
       this.placeholder.content = 'No folders';
-      // Remove any dynamic children
+      // Remove any dynamic children (recursive: frees native handles).
       for (const c of this.getChildren().slice()) {
         if (c.id !== 'folder-tabs-placeholder') {
-          this.remove(c);
-          c.destroy();
+          c.destroyRecursively();
         }
       }
       return;
     }
 
     this.placeholder.visible = false;
-    // Drop dynamic children, keep placeholder
+    // Drop dynamic children, keep placeholder (recursive: frees handles).
     for (const c of this.getChildren().slice()) {
       if (c.id !== 'folder-tabs-placeholder') {
-        this.remove(c);
-        c.destroy();
+        c.destroyRecursively();
       }
     }
 
-    for (const folder of folders) {
+    for (let i = 0; i < folders.length; i += 1) {
+      const folder = folders[i]!;
       const isActive = folder.id === currentFolderId;
       // `folder.unreadCount` is populated at read time from
       // persisted emails (`MessageRepository` GROUP BY folder_id), so it
@@ -83,17 +88,42 @@ export class FolderTabs extends BoxRenderable {
       const folderWithUnread = selectors.foldersWithUnread.find((f) => f.id === folder.id);
       const unread = folderWithUnread?.unreadCount ?? 0;
       // Folder names come from the IMAP server: sanitize before display.
+      // The name node keeps the `folder-tab-<id>` id and the exact
+      // sanitized name so existing text lookups keep working; marker and
+      // count are separate nodes.
       const safeName = sanitizeForTerminal(folder.name);
-      const label = unread > 0 ? `${safeName} (${unread})` : safeName;
-      const tab = new TextRenderable(this.ctx, {
+      const row = new BoxRenderable(this.ctx, {
+        id: `folder-row-${folder.id}`,
+        flexDirection: 'row',
+        width: '100%',
+        height: 1,
+      });
+      const marker = new TextRenderable(this.ctx, {
+        id: `folder-tab-marker-${folder.id}`,
+        content: isActive ? '› ' : '  ',
+        fg: isActive ? this.theme.primary : this.theme.textMuted,
+        attributes: isActive ? TextAttributes.BOLD : 0,
+        flexShrink: 0,
+      });
+      const name = new TextRenderable(this.ctx, {
         id: `folder-tab-${folder.id}`,
-        content: label,
+        content: safeName,
         fg: isActive ? this.theme.primary : this.theme.textSecondary,
         attributes: isActive ? TextAttributes.BOLD : 0,
-        paddingRight: 1,
+        flexGrow: 1,
+        flexShrink: 1,
       });
-      tab.onMouseUp = () => actions.setCurrentFolder(folder.id);
-      this.add(tab);
+      const count = new TextRenderable(this.ctx, {
+        id: `folder-tab-count-${folder.id}`,
+        content: unread > 0 ? ` (${unread})` : '',
+        fg: isActive ? this.theme.primary : this.theme.textMuted,
+        flexShrink: 0,
+      });
+      row.onMouseUp = () => actions.setCurrentFolder(folder.id);
+      row.add(marker);
+      row.add(name);
+      row.add(count);
+      this.add(row);
     }
   }
 
