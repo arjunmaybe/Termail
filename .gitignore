@@ -4,6 +4,9 @@ node_modules/
 # Build output
 dist/
 
+# Astro website generated type declarations and content cache
+website/.astro/
+
 # Environment files
 .env
 .env.local

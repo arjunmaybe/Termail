@@ -1,0 +1,80 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+
+const siteHref = Astro.site ? Astro.site.toString() : undefined;
+const hasValidSite = siteHref ? /^https?:\/\/[^/]+\/?/.test(siteHref) : false;
+const canonical = hasValidSite ? new URL(Astro.url.pathname, siteHref).href : undefined;
+const ogImage = hasValidSite ? new URL('/termail.png', siteHref).href : undefined;
+
+const repoUrl = 'https://github.com/arjunmaybe/Termail';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {canonical && <link rel="canonical" href={canonical} />}
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    {canonical && <meta property="og:url" content={canonical} />}
+    {ogImage && <meta property="og:image" content={ogImage} />}
+    {ogImage && (
+      <meta
+        property="og:image:alt"
+        content="Termail terminal inbox showing folders on the left and a synthetic message list on the right"
+      />
+    )}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    {ogImage && <meta name="twitter:image" content={ogImage} />}
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23161a1d'/%3E%3Cpath d='M8 11h16v3H16v9h-3v-9H8z' fill='%2373c48f'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="wrap header-inner">
+        <a class="wordmark" href="#top" aria-label="Termail — back to top">
+          <span class="wordmark-badge" aria-hidden="true">T</span>
+          <span class="wordmark-text">Termail</span>
+          <span class="wordmark-sub">terminal mail</span>
+        </a>
+        <nav class="site-nav" aria-label="Page sections">
+          <a href="#experience">Inbox</a>
+          <a href="#capabilities">Capabilities</a>
+          <a href="#setup">Setup</a>
+          <a href="#security">Security</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <a class="header-cta" href={repoUrl} rel="noopener">Source</a>
+      </div>
+    </header>
+    <main id="main">
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <div class="footer-brand">
+          <p class="footer-title">Termail</p>
+          <p class="footer-note">A terminal email client. Source is public at github.com/arjunmaybe/Termail. No license file is currently present in the repository.</p>
+        </div>
+        <nav class="footer-nav" aria-label="Project links">
+          <a href={repoUrl} rel="noopener">Source repository</a>
+          <a href={`${repoUrl}/blob/main/README.md`} rel="noopener">Documentation (README)</a>
+          <a href={`${repoUrl}/blob/main/SECURITY.md`} rel="noopener">Security policy</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
