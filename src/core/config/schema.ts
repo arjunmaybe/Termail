@@ -142,25 +142,27 @@ export const appConfigSchema = z.object({
 
 // Type assertion: Zod's input/output types differ (defaults are optional in
 // input, required in output); runtime behaviour matches our interfaces.
-const _databaseAssert: z.ZodType<DatabaseConfig, z.ZodTypeDef, DatabaseConfig> =
-  databaseConfigSchema as z.ZodType<DatabaseConfig, z.ZodTypeDef, DatabaseConfig>;
-const _uiAssert: z.ZodType<UiConfig, z.ZodTypeDef, UiConfig> = uiConfigSchema as z.ZodType<
+// Zod 4 declares output/input as the two `ZodType` generics.
+const _databaseAssert: z.ZodType<
+  DatabaseConfig,
+  z.input<typeof databaseConfigSchema>
+> = databaseConfigSchema as z.ZodType<DatabaseConfig, z.input<typeof databaseConfigSchema>>;
+const _uiAssert: z.ZodType<UiConfig, z.input<typeof uiConfigSchema>> = uiConfigSchema as z.ZodType<
   UiConfig,
-  z.ZodTypeDef,
-  UiConfig
+  z.input<typeof uiConfigSchema>
 >;
-const _accountAssert: z.ZodType<AccountConfig, z.ZodTypeDef, AccountConfig> =
-  accountConfigSchema as z.ZodType<AccountConfig, z.ZodTypeDef, AccountConfig>;
-const _aiAssert: z.ZodType<AiConfig, z.ZodTypeDef, AiConfig> = aiConfigSchema as z.ZodType<
+const _accountAssert: z.ZodType<
+  AccountConfig,
+  z.input<typeof accountConfigSchema>
+> = accountConfigSchema as z.ZodType<AccountConfig, z.input<typeof accountConfigSchema>>;
+const _aiAssert: z.ZodType<AiConfig, z.input<typeof aiConfigSchema>> = aiConfigSchema as z.ZodType<
   AiConfig,
-  z.ZodTypeDef,
-  AiConfig
+  z.input<typeof aiConfigSchema>
 >;
-const _appAssert: z.ZodType<AppConfig, z.ZodTypeDef, AppConfig> = appConfigSchema as z.ZodType<
+const _appAssert: z.ZodType<
   AppConfig,
-  z.ZodTypeDef,
-  AppConfig
->;
+  z.input<typeof appConfigSchema>
+> = appConfigSchema as z.ZodType<AppConfig, z.input<typeof appConfigSchema>>;
 void _databaseAssert;
 void _uiAssert;
 void _accountAssert;
