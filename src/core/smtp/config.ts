@@ -16,10 +16,7 @@ import type { AccountConfig, SmtpMode } from '../types/config.js';
 import { NetworkError } from '../utils/errors.js';
 import type { ResolvedSmtpConfig } from './types.js';
 
-export function resolveSmtpMode(input: {
-  smtpPort?: number;
-  smtpMode?: SmtpMode;
-}): SmtpMode {
+export function resolveSmtpMode(input: { smtpPort?: number; smtpMode?: SmtpMode }): SmtpMode {
   if (input.smtpMode !== undefined) return input.smtpMode;
   if (input.smtpPort !== undefined) return input.smtpPort === 465 ? 'implicit-tls' : 'starttls';
   return 'implicit-tls';

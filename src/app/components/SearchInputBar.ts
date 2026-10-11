@@ -39,7 +39,6 @@ export interface SearchInputBarOptions {
  * bar never mutates the buffer on its own.
  */
 export class SearchInputBar extends BoxRenderable {
-  private theme: Theme;
   private prompt: TextRenderable;
   private input: TextRenderable;
   private unsubscribe: (() => void) | null = null;
@@ -56,8 +55,6 @@ export class SearchInputBar extends BoxRenderable {
       borderStyle: 'single',
       borderColor: theme.border,
     });
-
-    this.theme = theme;
 
     this.prompt = new TextRenderable(ctx, {
       id: 'search-prompt',
@@ -89,7 +86,6 @@ export class SearchInputBar extends BoxRenderable {
   }
 
   setTheme(theme: Theme): void {
-    this.theme = theme;
     this.backgroundColor = theme.surface;
     this.borderColor = theme.border;
     this.prompt.fg = theme.primary;

@@ -16,7 +16,6 @@ export interface SidebarOptions {
 }
 
 export class Sidebar extends BoxRenderable {
-  private theme: Theme;
   private themeMode: 'dark' | 'light';
   private header: BoxRenderable;
   private titleText: TextRenderable;
@@ -42,7 +41,6 @@ export class Sidebar extends BoxRenderable {
       shouldFill: true,
     });
 
-    this.theme = theme;
     this.themeMode = options.themeMode;
     const collapsed = options.collapsed ?? false;
 
@@ -131,7 +129,6 @@ export class Sidebar extends BoxRenderable {
   }
 
   setTheme(theme: Theme): void {
-    this.theme = theme;
     this.themeMode = theme === getTheme('dark') ? 'dark' : 'light';
     this.backgroundColor = theme.surface;
     this.borderColor = theme.border;

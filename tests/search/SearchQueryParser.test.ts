@@ -32,9 +32,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  type ParseIssueKind,
-  type ParsedSearchQuery,
   isValidIsoDate,
+  type ParseIssueKind,
   parseSearchQuery,
   parseSearchQueryOrEmpty,
 } from '../../src/core/search/SearchQueryParser.js';

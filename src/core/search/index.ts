@@ -11,15 +11,15 @@
  * code.
  */
 
+export type {
+  ParsedSearchQuery,
+  ParseIssue,
+  ParseIssueKind,
+  ParseResult,
+} from './SearchQueryParser.js';
 export {
+  isValidIsoDate,
   parseSearchQuery,
   parseSearchQueryOrEmpty,
   tokenize,
-  isValidIsoDate,
-} from './SearchQueryParser.js';
-export type {
-  ParsedSearchQuery,
-  ParseResult,
-  ParseIssue,
-  ParseIssueKind,
 } from './SearchQueryParser.js';

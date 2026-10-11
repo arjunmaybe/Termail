@@ -16,9 +16,9 @@ import type { SecretStore } from '../secretstore/SecretStore.js';
 import type { AccountConfig } from '../types/config.js';
 import {
   AuthenticationError,
+  getErrorMessage,
   NetworkError,
   ValidationError,
-  getErrorMessage,
 } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { resolveSmtpConfig } from './config.js';
@@ -66,7 +66,7 @@ export class SmtpService {
   }
 
   async sendMail(account: AccountConfig, envelope: SmtpEnvelope): Promise<SendOutcome> {
-    if (!account || !account.id) {
+    if (!account?.id) {
       return { kind: 'validation', message: 'No account configured' };
     }
     if (account.authType !== 'password') {

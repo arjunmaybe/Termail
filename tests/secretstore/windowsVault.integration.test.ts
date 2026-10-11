@@ -12,8 +12,8 @@
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
-  WindowsVaultSecretStore,
   catchVaultMiss,
+  WindowsVaultSecretStore,
 } from '../../src/core/secretstore/windowsVault.js';
 
 const enabled = process.env.TERMAIL_TEST_WINDOWS_VAULT === '1' && process.platform === 'win32';

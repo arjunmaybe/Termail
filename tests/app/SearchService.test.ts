@@ -16,8 +16,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SearchService } from '../../src/app/services/SearchService.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
-import { MessageRepository } from '../../src/core/database/MessageRepository.js';
 import type { SafeAccountInput } from '../../src/core/database/MessageRepository.js';
+import { MessageRepository } from '../../src/core/database/MessageRepository.js';
 import {
   SEARCH_DEFAULT_LIMIT,
   SEARCH_MAX_LIMIT,

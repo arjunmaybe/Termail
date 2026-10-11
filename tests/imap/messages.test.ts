@@ -10,11 +10,11 @@ import type { FetchMessageObject, ImapFlow } from 'imapflow';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ImapService } from '../../src/core/imap/ImapService.js';
 import {
+  buildFetchQuery,
+  buildFetchRange,
   DEFAULT_BATCH_SIZE,
   DEFAULT_MAX_MESSAGES,
   DEFAULT_MAX_SOURCE_BYTES,
-  buildFetchQuery,
-  buildFetchRange,
   dedupeMessages,
   extractBodyAsync,
   flagsToBooleans,

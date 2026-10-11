@@ -11,9 +11,9 @@
 
 import {
   AuthenticationError,
+  getErrorMessage,
   NetworkError,
   ValidationError,
-  getErrorMessage,
 } from '../utils/errors.js';
 import type { AiCompletionRequest, AiProvider } from './types.js';
 

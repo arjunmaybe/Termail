@@ -20,14 +20,14 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
-import {
-  MessageRepository,
-  buildImapSyncLimits,
-  persistSyncResult,
-} from '../../src/core/database/MessageRepository.js';
 import type {
   FolderSyncState,
   SafeAccountInput,
+} from '../../src/core/database/MessageRepository.js';
+import {
+  buildImapSyncLimits,
+  MessageRepository,
+  persistSyncResult,
 } from '../../src/core/database/MessageRepository.js';
 import type { SyncFolder } from '../../src/core/imap/folders.js';
 import type {
