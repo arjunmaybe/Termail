@@ -7,6 +7,10 @@ dist/
 # Environment files
 .env
 .env.local
+.env.production
+.env.development
+.env.test
+.env.*.local
 
 # IDE
 .vscode/
@@ -29,8 +33,10 @@ coverage/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+*.db
 
-# Config (local overrides)
+# Config (local overrides; anchored so fixtures under tests/ stay tracked)
+/config.json
 config.local.json
 
 # Local-only agent configuration (not required for contributors)

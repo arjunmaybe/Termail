@@ -20,30 +20,29 @@ over SMTP, and provides keyboard-first navigation and FTS5 search.
 - Compose is service-level (`ComposeController` + `SmtpService`): sending works
   programmatically and via AI-drafted replies routed into compose for review.
   There is no full-screen compose editor; external-editor composition is planned.
-- `bun run build` currently fails to bundle `@opentui/core` platform packages
-  in this environment (pre-existing packaging issue, unrelated to app code).
-  `bun run dev`, `bun run test:sequential`, and `bun run typecheck` are the
-  canonical checks.
+- `bun run build` succeeds locally on Windows and in Ubuntu CI. If a build
+  fails in another environment, `bun run dev`, `bun run test:sequential`,
+  and `bun run typecheck` remain the canonical checks.
 
 ## Quick Start
 
 ### Prerequisites
 
-- [Bun](https://bun.sh/) v1.1+
+- [Bun](https://bun.sh/) v1.4.1 (see `packageManager` in `package.json`; CI pins the same version)
 
 ### Install
 
 ```bash
 # Clone and install
-git clone <repo-url>
-cd termail
+git clone https://github.com/arjunmaybe/Termail.git
+cd Termail
 bun install
 
 # Development
 bun run dev
 
-# Build — currently blocked (see Limitations; command kept for reference)
-# bun run build
+# Production bundle (also exercised by CI)
+bun run build
 
 # Run tests (deterministic Bun gate: sequential workers avoid
 # pre-existing TUI renderer / global-state contention)
@@ -131,7 +130,7 @@ option is a one-time save into the operating-system credential store
 
 ```powershell
 # Run once per account (input is hidden, never displayed)
-bun run src/main.ts --set-password personal
+bun run src/main.ts --set-password work
 ```
 
 Other commands: `--set-oauth-token [account]`, `--delete-password
@@ -160,6 +159,21 @@ account; `smtpPort`/`smtpMode` default to implicit-tls/465.
 | `d` | AI draft reply (into compose, never auto-sends) |
 
 
+
+## Security notes
+
+* Email credentials live in environment variables or the Windows
+  Credential Manager entry created by the one-time setup flow — never in
+  `config.json`, SQLite, logs, or issue reports. Environment variables
+  take precedence when both are configured.
+* AI features (`s` summarize, `d` draft reply) send the selected email's
+  headers and up to `maxBodyChars` body characters (default 8000) to the
+  configured OpenRouter endpoint, only when explicitly invoked. Output is
+  display text / drafts for review, never auto-sent.
+* The local SQLite database is **not encrypted by Termail**. POSIX systems
+  get owner-only data directories/files; Windows ignores POSIX mode bits
+  and performs no ACL hardening — configure filesystem ACLs externally if
+  multiple users share the machine. See `SECURITY.md` for reporting.
 
 ## Screenshots
 
