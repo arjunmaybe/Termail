@@ -6,8 +6,8 @@ import { BoxRenderable, type RenderContext, TextRenderable } from '@opentui/core
 import { AiService } from '../core/ai/AiService.js';
 import { getConfigStore } from '../core/config/ConfigStore.js';
 import { getDatabase } from '../core/database/Database.js';
-import { MessageRepository } from '../core/database/MessageRepository.js';
 import type { PersistedEmail, PersistedFolder } from '../core/database/index.js';
+import { MessageRepository } from '../core/database/MessageRepository.js';
 import { getImapService } from '../core/imap/ImapService.js';
 import { getPlatformSecretStore } from '../core/secretstore/windowsVault.js';
 import { SmtpService } from '../core/smtp/SmtpService.js';
@@ -26,7 +26,7 @@ import { AiController } from './services/AiController.js';
 import { ComposeController } from './services/ComposeController.js';
 import { SearchController } from './services/SearchController.js';
 import { type SyncOutcome, SyncService } from './services/SyncService.js';
-import { type Theme, getTheme } from './theme.js';
+import { getTheme, type Theme } from './theme.js';
 
 export interface AppOptions {
   /** Initial theme mode; defaults to dark. */
@@ -761,7 +761,7 @@ export class App extends BoxRenderable {
   async draftReplyWithAi(): Promise<void> {
     if (this.isComposeActive()) return;
     const outcome = await this.aiController?.draftReplySelected();
-    if (!outcome || outcome.kind !== 'ok') return;
+    if (outcome?.kind !== 'ok') return;
     if (this.isComposeActive()) return;
     const email = getSelectedEmail();
     if (!email) return;

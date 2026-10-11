@@ -8,7 +8,7 @@
 
 import type { ImapFlow } from 'imapflow';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ImapService, buildImapOptions } from '../../src/core/imap/ImapService.js';
+import { buildImapOptions, ImapService } from '../../src/core/imap/ImapService.js';
 import type { ImapFlowFactory } from '../../src/core/imap/types.js';
 import type { AccountConfig } from '../../src/core/types/config.js';
 import { AuthenticationError, NetworkError } from '../../src/core/utils/errors.js';

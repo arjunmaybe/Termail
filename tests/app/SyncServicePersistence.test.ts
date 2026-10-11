@@ -21,11 +21,10 @@ import { type ImapServiceFactory, SyncService } from '../../src/app/services/Syn
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import { MessageRepository } from '../../src/core/database/MessageRepository.js';
-import type { ImapService } from '../../src/core/imap/ImapService.js';
 import type { FolderSyncResult, SyncFolder } from '../../src/core/imap/folders.js';
+import type { ImapService } from '../../src/core/imap/ImapService.js';
 import type { MessageSyncResult, SyncMessage } from '../../src/core/imap/types.js';
-import type { AppConfig } from '../../src/core/types/config.js';
-import type { AccountConfig } from '../../src/core/types/config.js';
+import type { AccountConfig, AppConfig } from '../../src/core/types/config.js';
 import { DatabaseError } from '../../src/core/utils/errors.js';
 
 // ---------------------------------------------------------------------------

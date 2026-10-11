@@ -15,10 +15,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { FolderTabs } from '../../src/app/components/FolderTabs.js';
 import { SearchInputBar } from '../../src/app/components/SearchInputBar.js';
 import { WelcomeView } from '../../src/app/components/WelcomeView.js';
-import { StatusBar, formatSyncError } from '../../src/app/layout/StatusBar.js';
+import { formatSyncError, StatusBar } from '../../src/app/layout/StatusBar.js';
 import { actions } from '../../src/core/state/AppState.js';
-import type { Account } from '../../src/core/types/index.js';
-import type { Folder } from '../../src/core/types/index.js';
+import type { Account, Folder } from '../../src/core/types/index.js';
 
 const ESC = String.fromCharCode(27);
 const BEL = String.fromCharCode(7);

@@ -14,7 +14,6 @@ export interface WelcomeViewOptions {
 }
 
 export class WelcomeView extends BoxRenderable {
-  private theme: Theme;
   private themeMode: 'dark' | 'light';
   private titleText: TextRenderable;
   private subtitle: TextRenderable;
@@ -33,7 +32,6 @@ export class WelcomeView extends BoxRenderable {
       backgroundColor: theme.background,
     });
 
-    this.theme = theme;
     this.themeMode = options.themeMode;
 
     this.titleText = new TextRenderable(ctx, {
@@ -76,7 +74,6 @@ export class WelcomeView extends BoxRenderable {
   }
 
   setTheme(theme: Theme): void {
-    this.theme = theme;
     this.themeMode = theme === getTheme('dark') ? 'dark' : 'light';
     this.backgroundColor = theme.background;
     this.titleText.fg = theme.textPrimary;

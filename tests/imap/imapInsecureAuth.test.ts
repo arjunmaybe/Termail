@@ -17,7 +17,7 @@
 import type { ImapFlow } from 'imapflow';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accountConfigSchema } from '../../src/core/config/schema.js';
-import { ImapService, buildImapOptions } from '../../src/core/imap/ImapService.js';
+import { buildImapOptions, ImapService } from '../../src/core/imap/ImapService.js';
 import type { ImapFlowFactory } from '../../src/core/imap/types.js';
 import type { AccountConfig } from '../../src/core/types/config.js';
 import { AuthenticationError } from '../../src/core/utils/errors.js';

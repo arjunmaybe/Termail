@@ -42,8 +42,8 @@
  */
 
 import type { Database } from './Database.js';
-import { parseAddresses, parseAttachments, parseFlags } from './MessageRepository.js';
 import type { PersistedEmail } from './MessageRepository.js';
+import { parseAddresses, parseAttachments, parseFlags } from './MessageRepository.js';
 
 // ---------------------------------------------------------------------------
 // Types

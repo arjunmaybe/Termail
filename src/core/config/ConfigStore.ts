@@ -13,7 +13,7 @@ import {
   writePrivateFileSync,
 } from '../utils/filePermissions.js';
 import { logger } from '../utils/logger.js';
-import { getConfigPath, getDefaultConfig, mergeWithDefaults } from './defaults.js';
+import { getConfigPath, getDefaultConfig } from './defaults.js';
 import { validateConfig, validateConfigSafe } from './schema.js';
 
 const __filename = fileURLToPath(import.meta.url);

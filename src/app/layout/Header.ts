@@ -18,7 +18,6 @@ export interface HeaderOptions {
 }
 
 export class Header extends BoxRenderable {
-  private theme: Theme;
   private titleText: TextRenderable;
   private contextText: TextRenderable;
   private unsubscribe: (() => void) | null = null;
@@ -35,8 +34,6 @@ export class Header extends BoxRenderable {
       paddingLeft: 1,
       paddingRight: 1,
     });
-
-    this.theme = theme;
 
     this.titleText = new TextRenderable(ctx, {
       id: 'app-header-title',
@@ -74,7 +71,6 @@ export class Header extends BoxRenderable {
   }
 
   setTheme(theme: Theme): void {
-    this.theme = theme;
     this.backgroundColor = theme.surface;
     this.titleText.fg = theme.primary;
     this.contextText.fg = theme.textMuted;

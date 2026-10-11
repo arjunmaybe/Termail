@@ -52,7 +52,7 @@ export interface ImapFlowFactory {
 }
 
 /** The raw list response shape from `imapflow`. Re-exported for tests. */
-export type { ListResponse, ImapFlow, ImapFlowOptions };
+export type { ImapFlow, ImapFlowOptions, ListResponse };
 
 // ---------------------------------------------------------------------------
 // Email / message sync types (Phase 2.3)

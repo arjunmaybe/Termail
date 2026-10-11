@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, vi } from 'vitest';
 import { resetConfigStore } from '../core/config/ConfigStore.js';
 import { resetDatabase } from '../core/database/Database.js';
-import { logger, setLogLevel } from '../core/utils/logger.js';
+import { setLogLevel } from '../core/utils/logger.js';
 
 // Silence non-error logs in tests
 setLogLevel('error');

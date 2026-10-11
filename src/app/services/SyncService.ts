@@ -21,17 +21,17 @@
  */
 
 import type { Database } from '../../core/database/Database.js';
+import type { PersistedEmail, PersistedFolder } from '../../core/database/index.js';
 import {
-  MessageRepository,
   buildImapSyncLimits,
   deriveFolderId,
+  MessageRepository,
 } from '../../core/database/MessageRepository.js';
-import type { PersistedEmail, PersistedFolder } from '../../core/database/index.js';
+import type { SyncFolder } from '../../core/imap/folders.js';
 import type { ImapService } from '../../core/imap/ImapService.js';
 import { getImapService, resetImapService } from '../../core/imap/ImapService.js';
-import type { SyncFolder } from '../../core/imap/folders.js';
 import type { AccountConfig } from '../../core/types/config.js';
-import { AuthenticationError, NetworkError, getErrorMessage } from '../../core/utils/errors.js';
+import { AuthenticationError, getErrorMessage, NetworkError } from '../../core/utils/errors.js';
 import { logger } from '../../core/utils/logger.js';
 
 /** Factory that produces an `ImapService` for a given account. */
@@ -76,12 +76,10 @@ export type SyncOutcome =
  * IMAP socket never leaks.
  */
 export class SyncService {
-  private readonly database: Database;
   private readonly factory: ImapServiceFactory;
   private readonly repository: MessageRepository;
 
   constructor(database: Database, factory: ImapServiceFactory = defaultFactory) {
-    this.database = database;
     this.factory = factory;
     this.repository = new MessageRepository(database);
   }
@@ -99,7 +97,7 @@ export class SyncService {
    * misleading success, never an advanced checkpoint).
    */
   async syncAccount(account: AccountConfig): Promise<SyncOutcome> {
-    if (!account || !account.id) {
+    if (!account?.id) {
       return { kind: 'no-account', message: 'No account configured' };
     }
 
@@ -190,7 +188,7 @@ export class SyncService {
    * `AppState` actions.
    */
   async syncAccountFolder(account: AccountConfig, imapFolderPath: string): Promise<SyncOutcome> {
-    if (!account || !account.id) {
+    if (!account?.id) {
       return { kind: 'no-account', message: 'No account configured' };
     }
     if (!imapFolderPath) {

@@ -21,7 +21,7 @@
 import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type MockInput, createTestRenderer } from '@opentui/core/testing';
+import { createTestRenderer, type MockInput } from '@opentui/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { App } from '../../src/app/App.js';
 import { routeKeypress } from '../../src/app/KeyRouter.js';

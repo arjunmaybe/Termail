@@ -16,7 +16,7 @@
 import net from 'node:net';
 import tls from 'node:tls';
 import type { SmtpMode } from '../types/config.js';
-import { AuthenticationError, NetworkError, getErrorMessage } from '../utils/errors.js';
+import { AuthenticationError, getErrorMessage, NetworkError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { buildEnvelopePayload } from './message.js';
 import type { SmtpEnvelope, SmtpTimeouts } from './types.js';

@@ -19,17 +19,16 @@ import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SyncService } from '../../src/app/services/SyncService.js';
 import type { ImapServiceFactory } from '../../src/app/services/SyncService.js';
+import { SyncService } from '../../src/app/services/SyncService.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import { MessageRepository } from '../../src/core/database/MessageRepository.js';
-import type { ImapService } from '../../src/core/imap/ImapService.js';
 import type { FolderSyncResult, SyncFolder } from '../../src/core/imap/folders.js';
+import type { ImapService } from '../../src/core/imap/ImapService.js';
 import type { MessageSyncResult, SyncMessage } from '../../src/core/imap/types.js';
 import { actions, selectors } from '../../src/core/state/AppState.js';
-import type { AppConfig } from '../../src/core/types/config.js';
-import type { AccountConfig } from '../../src/core/types/config.js';
+import type { AccountConfig, AppConfig } from '../../src/core/types/config.js';
 
 function makeAccountConfig(over: Partial<AccountConfig> = {}): AccountConfig {
   return {

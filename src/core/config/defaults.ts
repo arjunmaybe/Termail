@@ -4,9 +4,9 @@
 
 import type { AppConfig } from '../types/config.js';
 import {
-  DEFAULT_CONFIG,
   getConfigPath as _getConfigPath,
   getDatabasePath as _getDatabasePath,
+  DEFAULT_CONFIG,
 } from '../types/config.js';
 
 export function getDefaultConfig(): AppConfig {

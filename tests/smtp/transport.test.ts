@@ -6,10 +6,10 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  type LineSocket,
-  NodeSmtpTransport,
   buildImplicitTlsOptions,
   buildStarttlsUpgradeOptions,
+  type LineSocket,
+  NodeSmtpTransport,
   parseCapabilities,
   parseSmtpBuffer,
 } from '../../src/core/smtp/transport.js';
