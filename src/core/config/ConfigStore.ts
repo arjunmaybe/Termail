@@ -136,7 +136,7 @@ export class ConfigStore {
       const result = validateConfigSafe(parsed);
 
       if (!result.success) {
-        logger.warn('Config validation failed, using defaults', { errors: result.error.errors });
+        logger.warn('Config validation failed, using defaults', { errors: result.error.issues });
         const defaultConfig = getDefaultConfig();
         await this.save(defaultConfig);
         return defaultConfig;
