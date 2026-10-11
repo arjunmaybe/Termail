@@ -14,13 +14,13 @@
 import type { AiConfig } from '../types/config.js';
 import {
   AuthenticationError,
+  getErrorMessage,
   NetworkError,
   ValidationError,
-  getErrorMessage,
 } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { type FetchFn, OpenRouterTransport } from './OpenRouterTransport.js';
 import { resolveAiApiKey } from './credentials.js';
+import { type FetchFn, OpenRouterTransport } from './OpenRouterTransport.js';
 import { buildDraftReplyPrompt, buildSummarizePrompt } from './prompts.js';
 import type { AiEmailInput, AiOutcome, AiProviderFactory } from './types.js';
 

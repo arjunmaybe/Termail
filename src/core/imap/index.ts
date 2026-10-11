@@ -5,38 +5,37 @@
  * files so we can refactor the internals without breaking downstream code.
  */
 
-export type {
-  ImapAccountConfig,
-  ImapConnectionOptions,
-  ImapFolderInfo,
-  ImapFlowFactory,
-  EmailAddress,
-  SyncAttachment,
-  SyncMessage,
-  MessageSyncResult,
-  MessageSyncLimits,
-  MessageSyncOptions,
-} from './types.js';
 export {
-  type ResolvedCredentials,
   getEnvSecretName,
   getEnvSecretSuffix,
+  type ResolvedCredentials,
   redactSecrets,
   resolveCredentials,
 } from './credentials.js';
 export {
-  type FolderSyncResult,
-  type SyncFolder,
   classifyType,
   compareFolders,
+  type FolderSyncResult,
   normalizeMailboxEntry,
+  type SyncFolder,
   syncMailboxes,
 } from './folders.js';
 export {
+  buildImapOptions,
+  getImapService,
+  ImapService,
+  type ImapServiceOptions,
+  resetImapService,
+} from './ImapService.js';
+export {
   buildFetchQuery,
   buildFetchRange,
+  DEFAULT_BATCH_SIZE,
+  DEFAULT_MAX_MESSAGES,
+  DEFAULT_MAX_SOURCE_BYTES,
   dedupeMessages,
   extractBodyAsync,
+  flagsToBooleans,
   htmlToPlainText,
   mapAttachment,
   normalizeDate,
@@ -46,15 +45,16 @@ export {
   planBatches,
   resolveLimits,
   sortNewestFirst,
-  flagsToBooleans,
-  DEFAULT_BATCH_SIZE,
-  DEFAULT_MAX_MESSAGES,
-  DEFAULT_MAX_SOURCE_BYTES,
 } from './messages.js';
-export {
-  ImapService,
-  type ImapServiceOptions,
-  buildImapOptions,
-  getImapService,
-  resetImapService,
-} from './ImapService.js';
+export type {
+  EmailAddress,
+  ImapAccountConfig,
+  ImapConnectionOptions,
+  ImapFlowFactory,
+  ImapFolderInfo,
+  MessageSyncLimits,
+  MessageSyncOptions,
+  MessageSyncResult,
+  SyncAttachment,
+  SyncMessage,
+} from './types.js';

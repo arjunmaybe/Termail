@@ -6,51 +6,51 @@
  */
 
 export { Database, getDatabase, resetDatabase } from './Database.js';
-export {
-  getMigrations,
-  getCurrentVersion,
-  runMigrations,
-  rollbackMigration,
-} from './migrations.js';
-export type { Migration } from './migrations.js';
-export {
-  SCHEMA_VERSION,
-  CREATE_TABLES_SQL,
-  CREATE_TABLES_V1_SQL,
-  DROP_TABLES_SQL,
-} from './schema.js';
-export { MIGRATION_V2_UP_SQL } from './migrations/v2.sql.js';
-export { MIGRATION_V3_UP_SQL } from './migrations/v3.sql.js';
-export { MIGRATION_V4_UP_SQL } from './migrations/v4.sql.js';
-export {
-  MessageRepository,
-  buildImapSyncLimits,
-  persistSyncResult,
-  deriveEmailId,
-  deriveFolderId,
-  serializeAddresses,
-  serializeAttachments,
-  serializeFlags,
-  parseAddresses,
-  parseAttachments,
-  parseFlags,
-  toEpochSeconds,
-} from './MessageRepository.js';
 export type {
-  SafeAccountInput,
-  SyncStatus,
   FolderSyncState,
   PersistedEmail,
   PersistedFolder,
-  UpsertMessagesResult,
   PersistSyncResultOptions,
+  SafeAccountInput,
+  SyncStatus,
   SyncStatusOptions,
+  UpsertMessagesResult,
 } from './MessageRepository.js';
 export {
-  SearchRepository,
+  buildImapSyncLimits,
+  deriveEmailId,
+  deriveFolderId,
+  MessageRepository,
+  parseAddresses,
+  parseAttachments,
+  parseFlags,
+  persistSyncResult,
+  serializeAddresses,
+  serializeAttachments,
+  serializeFlags,
+  toEpochSeconds,
+} from './MessageRepository.js';
+export { MIGRATION_V2_UP_SQL } from './migrations/v2.sql.js';
+export { MIGRATION_V3_UP_SQL } from './migrations/v3.sql.js';
+export { MIGRATION_V4_UP_SQL } from './migrations/v4.sql.js';
+export type { Migration } from './migrations.js';
+export {
+  getCurrentVersion,
+  getMigrations,
+  rollbackMigration,
+  runMigrations,
+} from './migrations.js';
+export type { SearchHit, SearchOptions } from './SearchRepository.js';
+export {
   buildMatchQuery,
   clampLimit,
   SEARCH_DEFAULT_LIMIT,
   SEARCH_MAX_LIMIT,
+  SearchRepository,
 } from './SearchRepository.js';
-export type { SearchHit, SearchOptions } from './SearchRepository.js';
+export {
+  CREATE_TABLES_SQL,
+  CREATE_TABLES_V1_SQL,
+  DROP_TABLES_SQL,
+  SCHEMA_VERSION,
+} from './schema.js';

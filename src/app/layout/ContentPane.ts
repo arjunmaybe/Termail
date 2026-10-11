@@ -194,7 +194,7 @@ export class ContentPane extends BoxRenderable {
       const wasListHidden = !this.emailListView.visible;
       this.emailListView.visible = !!currentFolder;
       this.emailDetail.visible = false;
-      if (wasListHidden && !!currentFolder) {
+      if (wasListHidden && currentFolder) {
         this.emailListView.refreshVisible();
       }
     }
@@ -351,11 +351,7 @@ function formatAddresses(addrs: ReadonlyArray<EmailAddress>): string {
     .join(', ');
 }
 
-function formatAttachment(att: {
-  filename: string;
-  contentType: string;
-  size: number;
-}): string {
+function formatAttachment(att: { filename: string; contentType: string; size: number }): string {
   const name = att.filename || 'unnamed';
   const size = formatBytes(att.size);
   return `${name} (${size})`;

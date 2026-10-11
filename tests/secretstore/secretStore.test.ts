@@ -16,15 +16,15 @@ import {
   secretUsername,
 } from '../../src/core/secretstore/SecretStore.js';
 import {
+  buildHiddenPromptScript,
   type CredentialSetupDeps,
   type CredentialSetupRequest,
-  type PromptSpawner,
-  buildHiddenPromptScript,
   interpretPromptResult,
+  type PromptSpawner,
   promptHiddenPowerShell,
   runCredentialSetup,
 } from '../../src/core/secretstore/setupCredential.js';
-import { WindowsVaultSecretStore, psQuote } from '../../src/core/secretstore/windowsVault.js';
+import { psQuote, WindowsVaultSecretStore } from '../../src/core/secretstore/windowsVault.js';
 import type { AccountConfig } from '../../src/core/types/config.js';
 import { AuthenticationError } from '../../src/core/utils/errors.js';
 

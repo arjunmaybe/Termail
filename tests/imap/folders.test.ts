@@ -8,15 +8,15 @@
 
 import type { ImapFlow } from 'imapflow';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ImapService } from '../../src/core/imap/ImapService.js';
 import {
-  type FolderSyncResult,
-  type SyncFolder,
   classifyType,
   compareFolders,
+  type FolderSyncResult,
   normalizeMailboxEntry,
+  type SyncFolder,
   syncMailboxes,
 } from '../../src/core/imap/folders.js';
+import { ImapService } from '../../src/core/imap/ImapService.js';
 import type { ImapFlowFactory } from '../../src/core/imap/types.js';
 import type { AccountConfig } from '../../src/core/types/config.js';
 import { NetworkError } from '../../src/core/utils/errors.js';

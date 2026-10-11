@@ -2,7 +2,7 @@
  * ConfigStore tests
  */
 
-import { chmodSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -14,6 +14,7 @@ const isPosix = process.platform !== 'win32';
 // Windows they are skipped (not failed) to avoid brittle ACL checks.
 const itPosix = isPosix ? it : it.skip;
 const modeOf = (p: string): number => statSync(p).mode & 0o777;
+
 import type { AppConfig } from '../../src/core/types/config.js';
 import { DEFAULT_AI_CONFIG } from '../../src/core/types/config.js';
 

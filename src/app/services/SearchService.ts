@@ -21,11 +21,11 @@
 
 import type { Database } from '../../core/database/Database.js';
 import {
+  clampLimit,
   type SearchHit,
   type SearchOptions,
   SearchRepository,
   type StructuredSearchOptions,
-  clampLimit,
 } from '../../core/database/SearchRepository.js';
 import type { ParseIssue } from '../../core/search/SearchQueryParser.js';
 import { logger } from '../../core/utils/logger.js';

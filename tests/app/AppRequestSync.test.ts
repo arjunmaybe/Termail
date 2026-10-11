@@ -16,8 +16,7 @@ import { type SyncOutcome, SyncService } from '../../src/app/services/SyncServic
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
 import { actions, selectors } from '../../src/core/state/AppState.js';
-import type { AppConfig } from '../../src/core/types/config.js';
-import type { AccountConfig } from '../../src/core/types/config.js';
+import type { AccountConfig, AppConfig } from '../../src/core/types/config.js';
 
 function makeAccountConfig(over: Partial<AccountConfig> = {}): AccountConfig {
   return {

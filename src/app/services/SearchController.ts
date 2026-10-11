@@ -27,12 +27,12 @@
 
 import type { Database } from '../../core/database/Database.js';
 import { SEARCH_DEFAULT_LIMIT } from '../../core/database/SearchRepository.js';
-import type { ParseIssue, ParsedSearchQuery } from '../../core/search/SearchQueryParser.js';
+import type { ParsedSearchQuery, ParseIssue } from '../../core/search/SearchQueryParser.js';
 import { parseSearchQuery } from '../../core/search/SearchQueryParser.js';
 import { actions, selectors } from '../../core/state/AppState.js';
 import { logger } from '../../core/utils/logger.js';
-import { SearchService } from './SearchService.js';
 import type { SearchResponse } from './SearchService.js';
+import { SearchService } from './SearchService.js';
 
 /**
  * Orchestrates a single search interaction. The TUI calls

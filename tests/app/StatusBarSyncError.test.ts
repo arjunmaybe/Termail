@@ -8,7 +8,7 @@
 import type { CliRenderer } from '@opentui/core';
 import { createTestRenderer } from '@opentui/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
-import { StatusBar, formatSyncError } from '../../src/app/layout/StatusBar.js';
+import { formatSyncError, StatusBar } from '../../src/app/layout/StatusBar.js';
 import { resolveCredentials } from '../../src/core/imap/credentials.js';
 import { actions } from '../../src/core/state/AppState.js';
 import type { AccountConfig } from '../../src/core/types/config.js';
