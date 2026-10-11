@@ -11,6 +11,9 @@ dist/
 .env.development
 .env.test
 .env.*.local
+.env.*
+# Keep the documented template tracked (negation must follow the rules).
+!.env.example
 
 # IDE
 .vscode/
