@@ -15,6 +15,7 @@
  * `TERMAIL_WORK_MAIL_PASSWORD`.
  */
 
+import type { SecretStore } from '../secretstore/SecretStore.js';
 import type { AccountConfig } from '../types/config.js';
 import { AuthenticationError } from '../utils/errors.js';
 
@@ -41,32 +42,52 @@ export function getEnvSecretName(account: AccountConfig): string {
 }
 
 /**
- * Resolve credentials from the environment. Throws `AuthenticationError`
- * with a non-secret message if the variable is missing or empty.
+ * Resolve credentials with a documented precedence:
  *
- * The message is intentionally short: sync errors surface in the one-line
- * status bar, which shows only the first 80 characters, so the exact env
- * var name must fit inside that budget to stay actionable.
+ *   1. The `TERMAIL_<ACCOUNT>_PASSWORD` / `TERMAIL_<ACCOUNT>_OAUTH_TOKEN`
+ *      environment variable (override for development and headless use).
+ *      An empty variable does NOT count — resolution falls through.
+ *   2. The configured OS secret store (persistence across restarts).
+ *      Pass `null` to disable (environment-only behavior).
+ *   3. Otherwise an `AuthenticationError` naming the account and the
+ *      setup action. The message carries no secret.
+ *
+ * When `store` is `undefined` or `null`, only the environment is
+ * consulted (historical behavior). The application wires the platform
+ * store explicitly so tests without one stay hermetic.
  */
 export function resolveCredentials(
   account: AccountConfig,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  store?: SecretStore | null
 ): ResolvedCredentials {
   const envName = getEnvSecretName(account);
-  const value = env[envName];
-
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new AuthenticationError(
-      `Missing ${account.authType === 'oauth2' ? 'OAuth2 token' : 'password'} for account "${account.id}". ` +
-        `Set ${envName} env var.`
-    );
+  const envValue = env[envName];
+  if (typeof envValue === 'string' && envValue.length > 0) {
+    return {
+      user: account.username ?? account.email,
+      secret: envValue,
+      kind: account.authType,
+    };
   }
 
-  return {
-    user: account.username ?? account.email,
-    secret: value,
-    kind: account.authType,
-  };
+  const activeStore = store ?? null;
+  if (activeStore) {
+    const kind = account.authType === 'oauth2' ? 'oauth2' : 'password';
+    const stored = activeStore.getSecret(account.id, kind);
+    if (typeof stored === 'string' && stored.length > 0) {
+      return {
+        user: account.username ?? account.email,
+        secret: stored,
+        kind: account.authType,
+      };
+    }
+  }
+
+  throw new AuthenticationError(
+    `Missing ${account.authType === 'oauth2' ? 'OAuth2 token' : 'password'} for account "${account.id}". ` +
+      `Set ${envName} env var.`
+  );
 }
 
 /**

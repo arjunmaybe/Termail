@@ -25,6 +25,7 @@
  */
 
 import { ImapFlow, type ImapFlowOptions } from 'imapflow';
+import type { SecretStore } from '../secretstore/SecretStore.js';
 import type { AccountConfig } from '../types/config.js';
 import { AuthenticationError, NetworkError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
@@ -72,6 +73,11 @@ export interface ImapServiceOptions {
   factory?: ImapFlowFactory;
   /** Override env (used in tests). */
   env?: NodeJS.ProcessEnv;
+  /**
+   * OS secret store consulted when the env var is absent. `undefined` and
+   * `null` both mean environment-only resolution.
+   */
+  secretStore?: SecretStore | null;
 }
 
 /**
@@ -82,6 +88,7 @@ export class ImapService {
   private readonly account: ImapAccountConfig;
   private readonly factory: ImapFlowFactory;
   private readonly env: NodeJS.ProcessEnv;
+  private readonly secretStore: SecretStore | null;
   private client: ImapFlow | null = null;
   private lastCredentials: ResolvedCredentials | null = null;
 
@@ -89,6 +96,7 @@ export class ImapService {
     this.account = account;
     this.factory = options.factory ?? defaultFactory;
     this.env = options.env ?? process.env;
+    this.secretStore = options.secretStore ?? null;
   }
 
   /** Account this service is bound to. */
@@ -110,7 +118,7 @@ export class ImapService {
       throw new NetworkError('IMAP service is already connected. Call disconnect() first.');
     }
 
-    const credentials = resolveCredentials(this.account, this.env);
+    const credentials = resolveCredentials(this.account, this.env, this.secretStore);
     this.lastCredentials = credentials;
 
     const options = buildImapOptions(this.account, credentials);

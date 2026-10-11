@@ -12,6 +12,7 @@
  */
 
 import { resolveCredentials } from '../imap/credentials.js';
+import type { SecretStore } from '../secretstore/SecretStore.js';
 import type { AccountConfig } from '../types/config.js';
 import {
   AuthenticationError,
@@ -44,16 +45,23 @@ export interface SmtpServiceOptions {
   factory?: SmtpTransportFactory;
   env?: NodeJS.ProcessEnv;
   timeouts?: Partial<SmtpTimeouts>;
+  /**
+   * OS secret store consulted when the env var is absent. `undefined` and
+   * `null` both mean environment-only resolution.
+   */
+  secretStore?: SecretStore | null;
 }
 
 export class SmtpService {
   private readonly factory: SmtpTransportFactory;
   private readonly env: NodeJS.ProcessEnv;
+  private readonly secretStore: SecretStore | null;
   private readonly timeouts?: Partial<SmtpTimeouts>;
 
   constructor(options: SmtpServiceOptions = {}) {
     this.factory = options.factory ?? defaultFactory;
     this.env = options.env ?? process.env;
+    this.secretStore = options.secretStore ?? null;
     this.timeouts = options.timeouts;
   }
 
@@ -78,7 +86,7 @@ export class SmtpService {
     let user: string;
     let secret: string;
     try {
-      const creds = resolveCredentials(account, this.env);
+      const creds = resolveCredentials(account, this.env, this.secretStore);
       user = creds.user;
       secret = creds.secret;
     } catch (error) {

@@ -8,6 +8,8 @@ import { getConfigStore } from '../core/config/ConfigStore.js';
 import { getDatabase } from '../core/database/Database.js';
 import { MessageRepository } from '../core/database/MessageRepository.js';
 import type { PersistedEmail, PersistedFolder } from '../core/database/index.js';
+import { getImapService } from '../core/imap/ImapService.js';
+import { getPlatformSecretStore } from '../core/secretstore/windowsVault.js';
 import { SmtpService } from '../core/smtp/SmtpService.js';
 import { actions, selectors, subscribe } from '../core/state/AppState.js';
 import type { AccountConfig } from '../core/types/config.js';
@@ -156,8 +158,13 @@ export class App extends BoxRenderable {
       await database.initialize();
 
       // Default to a fresh `SyncService` if no test fake was injected.
+      // The factory attaches the platform secret store so a configured
+      // OS-stored credential is used when the env var is absent.
       if (!this.syncService) {
-        this.syncService = new SyncService(database);
+        const secretStore = getPlatformSecretStore();
+        this.syncService = new SyncService(database, (account) =>
+          getImapService(account, { secretStore })
+        );
       }
 
       // Phase 3.3 — the `SearchController` is built here, after the
@@ -169,7 +176,7 @@ export class App extends BoxRenderable {
       // Phase 4 — compose stack (no DB, no background work). The service
       // is stateless; the controller reads the current account from state.
       if (!this.smtpService) {
-        this.smtpService = new SmtpService();
+        this.smtpService = new SmtpService({ secretStore: getPlatformSecretStore() });
       }
       this.composeController = new ComposeController(this.smtpService, () => {
         const accountId = selectors.currentAccountId;

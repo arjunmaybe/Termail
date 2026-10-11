@@ -125,9 +125,22 @@ Configuration is stored at `~/.config/termail/config.json`:
 }
 ```
 
-Credentials are never stored in config. Set per-account secrets in the
-environment (`TERMAIL_<ACCOUNT_ID>_PASSWORD` or `TERMAIL_<ACCOUNT_ID>_OAUTH_TOKEN`;
-non-alphanumeric id characters become `_`). SMTP requires `smtpHost` on the
+Credentials are never stored in config or the mail database. The fastest
+option is a one-time save into the operating-system credential store
+(Windows Credential Manager), which Termail reads on every launch:
+
+```powershell
+# Run once per account (input is hidden, never displayed)
+bun run src/main.ts --set-password personal
+```
+
+Other commands: `--set-oauth-token [account]`, `--delete-password
+[account]`, `--delete-oauth-token [account]` (the account id defaults to
+the only configured account). OS storage is implemented on Windows only;
+everywhere else, and for headless use, set per-account secrets in the
+environment (`TERMAIL_<ACCOUNT_ID>_PASSWORD` or
+`TERMAIL_<ACCOUNT_ID>_OAUTH_TOKEN`; non-alphanumeric id characters become
+`_`), which always takes precedence. SMTP requires `smtpHost` on the
 account; `smtpPort`/`smtpMode` default to implicit-tls/465.
 
 ## Keyboard Shortcuts
@@ -138,8 +151,8 @@ account; `smtpPort`/`smtpMode` default to implicit-tls/465.
 | `k` / Up | Previous email |
 | `h` / Left | Previous folder |
 | `l` / Right, `Tab` | Next folder |
-| `Enter` | Select first email when none selected |
-| `Esc` | Back to list |
+| `Enter` | Open the highlighted email (never advances to the next one) |
+| `Esc` | Back to the list, keeping the highlight |
 | `q` | Quit |
 | `/` | Search (`Esc` cancels, `Enter` submits) |
 | `r` | Sync current folder |
