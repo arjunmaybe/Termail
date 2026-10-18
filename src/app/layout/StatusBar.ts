@@ -21,6 +21,7 @@ export class StatusBar extends BoxRenderable {
   private emailCount: TextRenderable;
   private unreadLabel: TextRenderable;
   private syncLabel: TextRenderable;
+  private statusMessage: TextRenderable;
   private unsubscribe: (() => void) | null = null;
   /**
    * Below this terminal width the left-side keyboard hints are hidden so
@@ -68,7 +69,15 @@ export class StatusBar extends BoxRenderable {
     this.leftGroup.add(this.kbdHint(ctx, 'r', 'Sync'));
     this.leftGroup.add(this.kbdHint(ctx, 's', 'AI summary'));
     this.leftGroup.add(this.kbdHint(ctx, 'd', 'AI draft'));
+    this.leftGroup.add(this.kbdHint(ctx, 'c', 'Compose'));
 
+    this.statusMessage = new TextRenderable(ctx, {
+      id: 'status-message',
+      content: '',
+      fg: theme.success,
+      flexShrink: 0,
+      paddingRight: 2,
+    });
     this.folderLabel = new TextRenderable(ctx, {
       id: 'status-folder',
       content: 'Folder: None',
@@ -97,6 +106,7 @@ export class StatusBar extends BoxRenderable {
       flexShrink: 0,
     });
 
+    this.rightGroup.add(this.statusMessage);
     this.rightGroup.add(this.folderLabel);
     this.rightGroup.add(this.emailCount);
     this.rightGroup.add(this.unreadLabel);
@@ -134,6 +144,11 @@ export class StatusBar extends BoxRenderable {
   }
 
   private refresh(): void {
+    // Transient status (e.g. "Message sent"). Sanitized like all other
+    // status-bar text since it is rendered verbatim by OpenTUI.
+    const message = selectors.statusMessage;
+    this.statusMessage.content = message ? sanitizeForTerminal(message) : '';
+
     const folder = selectors.currentFolder;
     // Folder names come from the IMAP server: sanitize before display.
     this.folderLabel.content = sanitizeForTerminal(`Folder: ${folder?.name ?? 'None'}`);
@@ -182,6 +197,7 @@ export class StatusBar extends BoxRenderable {
     this.folderLabel.fg = theme.textSecondary;
     this.emailCount.fg = theme.textSecondary;
     this.unreadLabel.fg = theme.textSecondary;
+    this.statusMessage.fg = theme.success;
     this.refresh();
   }
 

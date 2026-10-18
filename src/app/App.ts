@@ -10,13 +10,19 @@ import type { PersistedEmail, PersistedFolder } from '../core/database/index.js'
 import { MessageRepository } from '../core/database/MessageRepository.js';
 import { getImapService } from '../core/imap/ImapService.js';
 import { getPlatformSecretStore } from '../core/secretstore/windowsVault.js';
+import { parseRecipientList } from '../core/smtp/message.js';
 import { SmtpService } from '../core/smtp/SmtpService.js';
-import { actions, selectors, subscribe } from '../core/state/AppState.js';
+import { actions, type ComposeField, selectors, subscribe } from '../core/state/AppState.js';
 import type { AccountConfig } from '../core/types/config.js';
 import type { Account, Folder } from '../core/types/index.js';
 import { AuthenticationError } from '../core/utils/errors.js';
 import { logger } from '../core/utils/logger.js';
 import { sanitizeForTerminal } from '../core/utils/terminal.js';
+import {
+  COMPOSE_FIELD_ORDER,
+  type ComposeEditableField,
+  ComposeView,
+} from './components/ComposeView.js';
 import { SearchInputBar } from './components/SearchInputBar.js';
 import { ContentPane } from './layout/ContentPane.js';
 import { Header } from './layout/Header.js';
@@ -48,6 +54,7 @@ export class App extends BoxRenderable {
   private content: ContentPane;
   private statusBar: StatusBar;
   private searchInputBar: SearchInputBar;
+  private composeView: ComposeView;
   private banner: TextRenderable;
   private errorBanner: TextRenderable;
   private initialized = false;
@@ -58,6 +65,18 @@ export class App extends BoxRenderable {
   private composeController: ComposeController | null = null;
   private aiService: AiService | null = null;
   private aiController: AiController | null = null;
+  /**
+   * Reacts to `composeActive` to swap the whole shell for the full-screen
+   * composer. Owned for the App's lifetime (not `attach()`), so the swap
+   * is consistent in tests that build an `App` without the state wiring.
+   */
+  private shellUnsubscribe: (() => void) | null = null;
+  /**
+   * The `attach()` state subscription. Owned (not just returned) so a
+   * destroyed App stops reacting to state changes — otherwise a stale
+   * subscription would keep calling `applyTheme` on torn-down renderables.
+   */
+  private attachUnsubscribe: (() => void) | null = null;
   /**
    * Global single-flight guard. Only one manual synchronization
    * may be active at a time because the IMAP service is account-scoped
@@ -116,6 +135,11 @@ export class App extends BoxRenderable {
       id: 'search-input-bar',
       themeMode: this.themeMode,
     });
+    this.composeView = new ComposeView(ctx, {
+      id: 'compose-view',
+      themeMode: this.themeMode,
+      onFieldInput: (field, text) => this.handleComposeFieldInput(field, text),
+    });
 
     this.sidebar.visible = false;
     this.content.visible = false;
@@ -123,6 +147,7 @@ export class App extends BoxRenderable {
     this.mainRow.visible = false;
     this.statusBar.visible = false;
     this.searchInputBar.visible = false;
+    this.composeView.visible = false;
     this.errorBanner.visible = false;
 
     this.add(this.banner);
@@ -133,6 +158,7 @@ export class App extends BoxRenderable {
     this.add(this.mainRow);
     this.add(this.searchInputBar);
     this.add(this.statusBar);
+    this.add(this.composeView);
 
     // The `SyncService` is constructed lazily inside `initialize()` once
     // the database is ready, unless the caller injected one (tests).
@@ -141,6 +167,9 @@ export class App extends BoxRenderable {
     this.smtpService = options.smtpService ?? null;
     // Phase 5 — optional injected `AiService` (tests). Built lazily below.
     this.aiService = options.aiService ?? null;
+
+    // Keep the shell/composer swap in sync with `composeActive`.
+    this.shellUnsubscribe = subscribe(() => this.applyShellVisibility());
 
     this.initialize();
   }
@@ -225,6 +254,7 @@ export class App extends BoxRenderable {
       this.statusBar.visible = true;
       this.errorBanner.visible = false;
       this.applyTheme(this.theme);
+      this.applyShellVisibility();
       logger.info('Application initialized successfully');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -250,6 +280,59 @@ export class App extends BoxRenderable {
     this.content.setTheme(theme);
     this.statusBar.setTheme(theme);
     this.searchInputBar.setTheme(theme);
+    this.composeView.setTheme(theme);
+  }
+
+  /**
+   * Swap between the normal shell and the full-screen composer. While
+   * composing, the header, sidebar/content row, search bar and status bar
+   * are all hidden and the composer occupies the whole root area; closing
+   * restores them. Only touches the shell once initialization has
+   * completed, so the init banner is never clobbered.
+   */
+  private applyShellVisibility(): void {
+    const composing = selectors.composeActive;
+    this.composeView.visible = composing;
+    if (composing) {
+      this.header.visible = false;
+      this.mainRow.visible = false;
+      this.searchInputBar.visible = false;
+      this.statusBar.visible = false;
+      this.errorBanner.visible = false;
+      return;
+    }
+    if (this.initialized) {
+      this.header.visible = true;
+      this.mainRow.visible = true;
+      this.sidebar.visible = true;
+      this.content.visible = true;
+      this.statusBar.visible = true;
+    }
+  }
+
+  /**
+   * Map raw composer field text to state. Recipient fields are parsed
+   * with the shared `parseRecipientList` so the field text and the
+   * structured arrays always agree.
+   */
+  private handleComposeFieldInput(field: ComposeEditableField, text: string): void {
+    switch (field) {
+      case 'to':
+        this.composeController?.setTo(parseRecipientList(text));
+        break;
+      case 'cc':
+        this.composeController?.setCc(parseRecipientList(text));
+        break;
+      case 'bcc':
+        this.composeController?.setBcc(parseRecipientList(text));
+        break;
+      case 'subject':
+        this.composeController?.setSubject(text);
+        break;
+      case 'body':
+        this.composeController?.setBody(text);
+        break;
+    }
   }
 
   /**
@@ -258,7 +341,9 @@ export class App extends BoxRenderable {
    * the email list for the newly selected folder.
    */
   attach(): () => void {
-    return subscribe(() => {
+    // Re-attaching replaces any previous subscription so only one is live.
+    if (this.attachUnsubscribe) this.attachUnsubscribe();
+    const unsubscribe = subscribe(() => {
       // Re-apply theme if it changed via actions
       const newTheme = getTheme(this.themeMode);
       this.applyTheme(newTheme);
@@ -268,6 +353,8 @@ export class App extends BoxRenderable {
         this.loadEmailsForFolder(folderId);
       }
     });
+    this.attachUnsubscribe = unsubscribe;
+    return unsubscribe;
   }
 
   /**
@@ -688,6 +775,29 @@ export class App extends BoxRenderable {
     return this.composeController?.isActive() ?? false;
   }
 
+  isComposeSending(): boolean {
+    return this.composeController?.isSending() ?? false;
+  }
+
+  /** True while the composer's discard-confirmation prompt is showing. */
+  isComposeConfirmingDiscard(): boolean {
+    return selectors.composeConfirmDiscard;
+  }
+
+  /** Which composer field currently owns focus. */
+  getComposeFocus(): ComposeField {
+    return selectors.composeFocus;
+  }
+
+  /** Transient status-bar message, or null when none is showing. */
+  getStatusMessage(): string | null {
+    return selectors.statusMessage;
+  }
+
+  clearStatusMessage(): void {
+    if (selectors.statusMessage !== null) actions.setStatusMessage(null);
+  }
+
   openCompose(): void {
     this.composeController?.openCompose();
   }
@@ -716,8 +826,78 @@ export class App extends BoxRenderable {
     this.composeController?.setBody(body);
   }
 
+  /**
+   * Move focus through the composer field order (To → Cc → Bcc → Subject →
+   * Body → Send) and wrap. The view reacts to `composeFocus` and moves the
+   * native editor focus to match.
+   */
+  cycleComposeFocus(direction: 1 | -1): void {
+    const order = COMPOSE_FIELD_ORDER;
+    const current = selectors.composeFocus;
+    const idx = order.indexOf(current);
+    const nextIdx = (idx + direction + order.length) % order.length;
+    const next = order[nextIdx];
+    if (next) actions.setComposeFocus(next);
+  }
+
+  /**
+   * Discard-safety entry point for Escape and Ctrl+C. An empty composer
+   * closes immediately; a non-empty one asks for confirmation first. The
+   * editors are flushed into state first so content typed since the last
+   * content-change callback still counts as "non-empty".
+   */
+  requestComposeDiscard(): void {
+    if (!this.isComposeActive()) return;
+    // Never discard out from under an in-flight send.
+    if (this.isComposeSending()) return;
+    this.composeView.syncStateFromEditors();
+    if (this.composeController?.hasContent()) {
+      actions.setComposeConfirmDiscard(true);
+      return;
+    }
+    this.composeController?.cancelCompose();
+  }
+
+  /** Confirmed discard: close and clear the composer. */
+  confirmComposeDiscard(): void {
+    this.composeController?.cancelCompose();
+  }
+
+  /** Cancel the discard prompt and resume editing. */
+  cancelComposeDiscard(): void {
+    if (selectors.composeConfirmDiscard) actions.setComposeConfirmDiscard(false);
+  }
+
+  /**
+   * Request a send (Ctrl+Enter, or Enter/Space on the Send target).
+   * Single-flight: ignored while a send is already in flight.
+   */
+  requestComposeSend(): void {
+    if (!this.isComposeActive()) return;
+    if (this.isComposeSending()) return;
+    void this.submitCompose();
+  }
+
+  /**
+   * Send the current composer buffer. Flushes editor text into state so
+   * the sent body/recipients always match what is on screen. On success
+   * the composer closes (restoring the normal shell) and a `Message sent`
+   * status is shown; on failure the composer stays open with a sanitized
+   * error and no status message.
+   */
   async submitCompose(): Promise<void> {
-    await this.composeController?.submitCompose();
+    const controller = this.composeController;
+    if (!controller) return;
+    this.composeView.syncStateFromEditors();
+    const outcome = await controller.submitCompose();
+    if (outcome.kind === 'ok') {
+      controller.cancelCompose();
+      actions.setStatusMessage('Message sent');
+    }
+  }
+
+  getComposeView(): ComposeView {
+    return this.composeView;
   }
 
   getSmtpService(): SmtpService | null {
@@ -757,20 +937,39 @@ export class App extends BoxRenderable {
    * the buffer remains unchanged. After awaiting AI, re-checks compose
    * so a buffer opened while AI was in flight is never clobbered.
    * `openCompose()` semantics are unchanged globally.
+   *
+   * Stale-selection guard: the email the AI drafts for is captured when
+   * the request starts (the same selection `AiController` reads), and
+   * re-checked after the await. If the selection moved while the request
+   * was in flight, the draft is dropped rather than combined with a
+   * different email's recipient/subject.
    */
   async draftReplyWithAi(): Promise<void> {
     if (this.isComposeActive()) return;
+    // Identity of the email the AI is drafting for. `AiController` reads
+    // the same selection synchronously, so this is the email the
+    // generated text describes.
+    const requestedEmailId = getSelectedEmail()?.id ?? null;
     const outcome = await this.aiController?.draftReplySelected();
     if (outcome?.kind !== 'ok') return;
     if (this.isComposeActive()) return;
     const email = getSelectedEmail();
     if (!email) return;
+    if (email.id !== requestedEmailId) {
+      // The selection changed mid-generation: never pair the old email's
+      // AI body with the new email's recipient/subject.
+      actions.setStatusMessage('AI draft cancelled: the selected email changed');
+      return;
+    }
     const sender = email.fromAddresses[0]?.address;
-    this.composeController?.openCompose();
-    this.composeController?.setTo(sender !== undefined ? [sender] : []);
     const subject = email.subject;
-    this.composeController?.setSubject(/^re:/i.test(subject) ? subject : `Re: ${subject}`);
-    this.composeController?.setBody(outcome.text);
+    // Single atomic open: recipients, subject and body land together and
+    // the Body field takes focus once the editors hold them.
+    this.composeController?.openComposeDraft({
+      to: sender !== undefined ? [sender] : [],
+      subject: /^re:/i.test(subject) ? subject : `Re: ${subject}`,
+      body: outcome.text,
+    });
   }
 
   /** Clear any AI result/error. */
@@ -788,11 +987,16 @@ export class App extends BoxRenderable {
    * Not normally called by `main.ts`; that path exits the process.
    */
   override destroy(): void {
+    if (this.shellUnsubscribe) this.shellUnsubscribe();
+    this.shellUnsubscribe = null;
+    if (this.attachUnsubscribe) this.attachUnsubscribe();
+    this.attachUnsubscribe = null;
     this.header.destroy();
     this.sidebar.destroy();
     this.content.destroy();
     this.statusBar.destroy();
     this.searchInputBar.destroy();
+    this.composeView.destroy();
     this.errorBanner.destroy();
     this.banner.destroy();
   }

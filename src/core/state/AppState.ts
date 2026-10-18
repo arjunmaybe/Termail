@@ -7,6 +7,24 @@ import type { PersistedEmail } from '../database/index.js';
 import type { ParseIssue } from '../search/SearchQueryParser.js';
 import type { Account, Folder } from '../types/index.js';
 
+/**
+ * Which composer field owns the keyboard focus. The composer owns focus
+ * entirely (no mouse, no native tab-focus): the value here drives the
+ * native editor focus in `ComposeView`, and the key router reads it to
+ * decide whether Enter advances a field, inserts a newline, or sends.
+ */
+export type ComposeField = 'to' | 'cc' | 'bcc' | 'subject' | 'body' | 'send';
+
+/** Optional initial values for an atomic composer open. */
+export interface ComposeDraftInput {
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject?: string;
+  body?: string;
+  focus?: ComposeField;
+}
+
 export interface AppState {
   // Accounts
   accounts: Account[];
@@ -93,6 +111,22 @@ export interface AppState {
   composeError: string | null;
   /** True after a successful send until the next open/cancel. */
   composeSent: boolean;
+  /** Which composer field currently owns the keyboard focus. */
+  composeFocus: ComposeField;
+  /** True while the discard-confirmation prompt is showing. */
+  composeConfirmDiscard: boolean;
+  /**
+   * Bumped by every `openCompose`/`openComposeWith`. The view syncs editor
+   * text and focus exactly once per open, which avoids state/editor
+   * feedback loops and stale partial drafts.
+   */
+  composeRevision: number;
+
+  /**
+   * Transient status-bar message (e.g. after a successful send). Cleared
+   * on the next keypress; never backed by a timer.
+   */
+  statusMessage: string | null;
 
   // AI assistance state (Phase 5) — ephemeral view state, separate from
   // search and compose. AI prompts/responses are never persisted.
@@ -142,6 +176,10 @@ const _composeBody = signal<string>('');
 const _composeSending = signal<boolean>(false);
 const _composeError = signal<string | null>(null);
 const _composeSent = signal<boolean>(false);
+const _composeFocus = signal<ComposeField>('to');
+const _composeConfirmDiscard = signal<boolean>(false);
+const _composeRevision = signal<number>(0);
+const _statusMessage = signal<string | null>(null);
 
 // AI assistance state (Phase 5) — separate signals, never shared.
 const _aiMode = signal<'summary' | 'draft' | null>(null);
@@ -479,16 +517,40 @@ export const actions = {
     _composeSent.value = sent;
   },
 
-  openCompose() {
-    _composeActive.value = true;
-    _composeTo.value = [];
-    _composeCc.value = [];
-    _composeBcc.value = [];
-    _composeSubject.value = '';
-    _composeBody.value = '';
+  setComposeFocus(focus: ComposeField) {
+    _composeFocus.value = focus;
+  },
+
+  setComposeConfirmDiscard(confirm: boolean) {
+    _composeConfirmDiscard.value = confirm;
+  },
+
+  setStatusMessage(message: string | null) {
+    _statusMessage.value = message;
+  },
+
+  /**
+   * Atomic open. Field signals are written *before* `composeActive` is
+   * raised so the view observes a fully-populated buffer on the single
+   * activation transition (and never a half-applied draft).
+   */
+  openComposeWith(draft: ComposeDraftInput = {}) {
+    _composeTo.value = draft.to ?? [];
+    _composeCc.value = draft.cc ?? [];
+    _composeBcc.value = draft.bcc ?? [];
+    _composeSubject.value = draft.subject ?? '';
+    _composeBody.value = draft.body ?? '';
+    _composeFocus.value = draft.focus ?? 'to';
+    _composeConfirmDiscard.value = false;
     _composeSending.value = false;
     _composeError.value = null;
     _composeSent.value = false;
+    _composeRevision.value = _composeRevision.value + 1;
+    _composeActive.value = true;
+  },
+
+  openCompose() {
+    actions.openComposeWith({ focus: 'to' });
   },
 
   clearCompose() {
@@ -498,6 +560,8 @@ export const actions = {
     _composeBcc.value = [];
     _composeSubject.value = '';
     _composeBody.value = '';
+    _composeFocus.value = 'to';
+    _composeConfirmDiscard.value = false;
     _composeSending.value = false;
     _composeError.value = null;
     _composeSent.value = false;
@@ -564,6 +628,10 @@ export const actions = {
     _composeSending.value = false;
     _composeError.value = null;
     _composeSent.value = false;
+    _composeFocus.value = 'to';
+    _composeConfirmDiscard.value = false;
+    _composeRevision.value = 0;
+    _statusMessage.value = null;
     // AI assistance state (Phase 5)
     _aiMode.value = null;
     _aiResult.value = null;
@@ -685,6 +753,18 @@ export const selectors = {
   get composeSent() {
     return _composeSent.value;
   },
+  get composeFocus() {
+    return _composeFocus.value;
+  },
+  get composeConfirmDiscard() {
+    return _composeConfirmDiscard.value;
+  },
+  get composeRevision() {
+    return _composeRevision.value;
+  },
+  get statusMessage() {
+    return _statusMessage.value;
+  },
   // AI assistance selectors (Phase 5)
   get aiMode() {
     return _aiMode.value;
@@ -740,6 +820,10 @@ export function subscribe(fn: (state: AppState) => void): () => void {
     _composeSending,
     _composeError,
     _composeSent,
+    _composeFocus,
+    _composeConfirmDiscard,
+    _composeRevision,
+    _statusMessage,
     // AI assistance state (Phase 5)
     _aiMode,
     _aiResult,

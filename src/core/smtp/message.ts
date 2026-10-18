@@ -44,6 +44,24 @@ export function validateSubject(subject: string): string {
   return subject;
 }
 
+/**
+ * Split user-entered recipient text into discrete addresses. Commas,
+ * semicolons, and newlines are all accepted as separators (any mix,
+ * repeated). Each entry is trimmed and empty entries are dropped.
+ *
+ * This is the single source of truth for turning the composer's raw
+ * To/Cc/Bcc field text into the structured recipient arrays held in
+ * `AppState`, so the field text and the parsed array always agree.
+ * It performs no validation — callers validate each address (via
+ * `validateAddress`) before any transport is constructed.
+ */
+export function parseRecipientList(text: string): string[] {
+  return text
+    .split(/[,;\r\n]+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
 /** Split on any newline style and rejoin with CRLF. Preserves Unicode as-is. */
 export function normalizeBodyLines(body: string): string {
   return body.split(/\r\n|\n|\r/).join('\r\n');
