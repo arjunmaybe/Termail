@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 /**
  * Termail - Main entry point
  */
