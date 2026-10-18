@@ -26,6 +26,20 @@ over SMTP, and provides keyboard-first navigation and FTS5 search.
 
 ## Quick Start
 
+### Install globally
+
+Requires [Bun](https://bun.sh/) v1.4.1 or later.
+
+```powershell
+bun add --global termail
+termail
+```
+
+Once installed, run `termail` from any terminal directory.
+
+Each user must configure their own email account and credentials.
+
+
 ### Prerequisites
 
 - [Bun](https://bun.sh/) v1.4.1 (see `packageManager` in `package.json`; CI pins the same version)
@@ -130,7 +144,7 @@ option is a one-time save into the operating-system credential store
 
 ```powershell
 # Run once per account (input is hidden, never displayed)
-bun run src/main.ts --set-password work
+termail --set-password your-account-id
 ```
 
 Other commands: `--set-oauth-token [account]`, `--delete-password

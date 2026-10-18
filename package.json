@@ -2,9 +2,39 @@
   "name": "termail",
   "version": "1.0.0",
   "description": "Terminal email client built with Bun, TypeScript, and OpenTUI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arjunmaybe/Termail.git"
+  },
+  "homepage": "https://termail.pages.dev",
+  "bugs": {
+    "url": "https://github.com/arjunmaybe/Termail/issues"
+  },
+  "keywords": [
+    "terminal",
+    "email",
+    "email-client",
+    "cli",
+    "tui",
+    "imap",
+    "smtp",
+    "bun",
+    "opentui"
+  ],
   "type": "module",
   "main": "dist/main.js",
+  "bin": {
+    "termail": "./dist/main.js"
+  },
+  "files": [
+    "dist/**",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md"
+  ],
   "scripts": {
+    "prepack": "bun run build",
     "dev": "bun run --watch src/main.ts",
     "build": "bun build src/main.ts --outdir dist --target bun --external '@opentui/core-*'",
     "start": "bun run dist/main.js",
