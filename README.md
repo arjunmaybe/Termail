@@ -31,7 +31,7 @@ over SMTP, and provides keyboard-first navigation and FTS5 search.
 Requires [Bun](https://bun.sh/) v1.4.1 or later.
 
 ```powershell
-bun add --global termail
+bun add --global @arjunmaybe/termail
 termail
 ```
 
