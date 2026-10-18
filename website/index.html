@@ -6,25 +6,26 @@
     <title>Termail — a terminal email client</title>
     <meta
       name="description"
-      content="Termail is a terminal email client: IMAP sync, local SQLite storage, SMTP sending, keyboard-first navigation, FTS5 search, and optional AI assistance."
+      content="Termail is an installable terminal email client with IMAP sync, local SQLite storage, SMTP sending, keyboard-first navigation, FTS5 search, and optional AI assistance. Install globally with Bun."
     />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Termail — a terminal email client" />
     <meta
       property="og:description"
-      content="Termail is a terminal email client: IMAP sync, local SQLite storage, SMTP sending, keyboard-first navigation, FTS5 search, and optional AI assistance."
+      content="An installable terminal email client with IMAP sync, local SQLite storage, SMTP sending, FTS5 search, and optional AI assistance."
     />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="Termail — a terminal email client" />
     <meta
       name="twitter:description"
-      content="Termail is a terminal email client: IMAP sync, local SQLite storage, SMTP sending, keyboard-first navigation, FTS5 search, and optional AI assistance."
+      content="An installable terminal email client with IMAP sync, local SQLite storage, SMTP sending, FTS5 search, and optional AI assistance."
     />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23161a1d'/%3E%3Cpath d='M8 11h16v3H16v9h-3v-9H8z' fill='%2373c48f'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
+
     <header class="site-header">
       <div class="wrap header-inner">
         <a class="wordmark" href="#top" aria-label="Termail — back to top">
@@ -32,6 +33,7 @@
           <span class="wordmark-text">Termail</span>
           <span class="wordmark-sub">terminal mail</span>
         </a>
+
         <nav class="site-nav" aria-label="Page sections">
           <a href="#experience">Inbox</a>
           <a href="#capabilities">Capabilities</a>
@@ -39,9 +41,15 @@
           <a href="#security">Security</a>
           <a href="#faq">FAQ</a>
         </nav>
-        <a class="header-cta" href="https://github.com/arjunmaybe/Termail" rel="noopener">Source</a>
+
+        <a
+          class="header-cta"
+          href="https://github.com/arjunmaybe/Termail"
+          rel="noopener"
+        >Source</a>
       </div>
     </header>
+
     <main id="main">
       <div class="wrap" id="top">
         <section class="hero" aria-labelledby="hero-heading">
@@ -49,17 +57,38 @@
             <div>
               <p class="eyebrow">Terminal email client</p>
               <h1 id="hero-heading">Email that stays in the terminal.</h1>
+
               <p class="lede">
                 Termail syncs mail over IMAP, keeps a local SQLite copy you can
                 search offline, and sends over SMTP — all through a keyboard-first
                 interface built with Bun, TypeScript, and OpenTUI.
               </p>
+
               <div class="hero-actions">
-                <a class="button button-primary" href="https://github.com/arjunmaybe/Termail" rel="noopener">View source</a>
-                <a class="button button-secondary" href="#setup">Installation instructions</a>
+                <a class="button button-primary" href="#setup">Install Termail</a>
+                <a
+                  class="button button-secondary"
+                  href="https://www.npmjs.com/package/@arjunmaybe/termail"
+                  rel="noopener"
+                >npm package</a>
               </div>
-              <p class="hero-meta">Bun v1.4.1 · IMAP + SMTP · SQLite + FTS5 · AI off by default</p>
+
+              <div class="command">
+                <pre><code>bun add --global @arjunmaybe/termail
+termail</code></pre>
+                <button
+                  class="copy-btn"
+                  type="button"
+                  aria-label="Copy Termail installation commands"
+                  data-copy="bun add --global @arjunmaybe/termail&#10;termail"
+                >Copy</button>
+              </div>
+
+              <p class="hero-meta">
+                Bun v1.4.1 or later · IMAP + SMTP · SQLite + FTS5 · AI off by default
+              </p>
             </div>
+
             <figure class="shot">
               <div class="shot-bar" aria-hidden="true">
                 <span class="dot"></span>
@@ -75,18 +104,25 @@
                 loading="eager"
                 decoding="async"
               />
-              <figcaption>Real interface, synthetic demo data — no private mail shown.</figcaption>
+              <figcaption>
+                Real interface, synthetic demo data — no private mail shown.
+              </figcaption>
             </figure>
           </div>
         </section>
 
-        <section class="section" id="experience" aria-labelledby="experience-heading">
+        <section
+          class="section"
+          id="experience"
+          aria-labelledby="experience-heading"
+        >
           <h2 id="experience-heading">The product experience</h2>
           <p class="section-intro">
             One screen, three regions: folders on the left, messages in the
             middle, and a status bar along the bottom. Everything is reachable
             without leaving the keyboard.
           </p>
+
           <div class="two-col">
             <article class="card">
               <h3>Inbox and folders</h3>
@@ -95,18 +131,19 @@
                 INBOX, and tracks a per-folder checkpoint so later syncs resume
                 where they left off. Move between folders with <kbd>h</kbd> /
                 <kbd>Left</kbd> or <kbd>l</kbd> / <kbd>Right</kbd> (or
-                <kbd>Tab</kbd>); the status bar always shows the
-                current folder, message counts, and sync state.
+                <kbd>Tab</kbd>); the status bar always shows the current folder,
+                message counts, and sync state.
               </p>
             </article>
+
             <article class="card">
               <h3>Reading and search</h3>
               <p>
                 Step through mail with <kbd>j</kbd> / <kbd>Down</kbd> and
-                <kbd>k</kbd> / <kbd>Up</kbd>, open with
-                <kbd>Enter</kbd>, step back with <kbd>Esc</kbd>. Press
-                <kbd>/</kbd> to search the local full-text index — backed by
-                SQLite FTS5 — with structured operators:
+                <kbd>k</kbd> / <kbd>Up</kbd>, open with <kbd>Enter</kbd>, and
+                step back with <kbd>Esc</kbd>. Press <kbd>/</kbd> to search
+                the local full-text index — backed by SQLite FTS5 — with
+                structured operators:
               </p>
               <p>
                 <code>from:</code>, <code>to:</code>, <code>subject:</code>,
@@ -116,27 +153,57 @@
               </p>
             </article>
           </div>
+
           <table class="keys">
             <caption>Keyboard map — matches the default set in the README</caption>
             <tbody>
-              <tr><th scope="row"><kbd>j</kbd> / <kbd>Down</kbd>, <kbd>k</kbd> / <kbd>Up</kbd></th><td>Next / previous email</td></tr>
-              <tr><th scope="row"><kbd>h</kbd> / <kbd>Left</kbd>, <kbd>l</kbd> / <kbd>Right</kbd>, <kbd>Tab</kbd></th><td>Previous / next folder</td></tr>
-              <tr><th scope="row"><kbd>Enter</kbd></th><td>Open the highlighted email</td></tr>
-              <tr><th scope="row"><kbd>Esc</kbd></th><td>Back to the list, keeping the highlight</td></tr>
-              <tr><th scope="row"><kbd>/</kbd></th><td>Search (<kbd>Esc</kbd> cancels, <kbd>Enter</kbd> submits)</td></tr>
-              <tr><th scope="row"><kbd>r</kbd></th><td>Sync the current folder</td></tr>
-              <tr><th scope="row"><kbd>s</kbd> / <kbd>d</kbd></th><td>AI summary / AI-drafted reply (opt-in, never auto-sends)</td></tr>
-              <tr><th scope="row"><kbd>q</kbd></th><td>Quit</td></tr>
+              <tr>
+                <th scope="row"><kbd>j</kbd> / <kbd>Down</kbd>, <kbd>k</kbd> / <kbd>Up</kbd></th>
+                <td>Next / previous email</td>
+              </tr>
+              <tr>
+                <th scope="row"><kbd>h</kbd> / <kbd>Left</kbd>, <kbd>l</kbd> / <kbd>Right</kbd>, <kbd>Tab</kbd></th>
+                <td>Previous / next folder</td>
+              </tr>
+              <tr>
+                <th scope="row"><kbd>Enter</kbd></th>
+                <td>Open the highlighted email</td>
+              </tr>
+              <tr>
+                <th scope="row"><kbd>Esc</kbd></th>
+                <td>Back to the list, keeping the highlight</td>
+              </tr>
+              <tr>
+                <th scope="row"><kbd>/</kbd></th>
+                <td>Search (<kbd>Esc</kbd> cancels, <kbd>Enter</kbd> submits)</td>
+              </tr>
+              <tr>
+                <th scope="row"><kbd>r</kbd></th>
+                <td>Sync the current folder</td>
+              </tr>
+              <tr>
+                <th scope="row"><kbd>s</kbd> / <kbd>d</kbd></th>
+                <td>AI summary / AI-drafted reply (opt-in, never auto-sends)</td>
+              </tr>
+              <tr>
+                <th scope="row"><kbd>q</kbd></th>
+                <td>Quit</td>
+              </tr>
             </tbody>
           </table>
         </section>
 
-        <section class="section" id="capabilities" aria-labelledby="capabilities-heading">
+        <section
+          class="section"
+          id="capabilities"
+          aria-labelledby="capabilities-heading"
+        >
           <h2 id="capabilities-heading">Capabilities</h2>
           <p class="section-intro">
-            What Termail does today — email, synchronization, configuration, and
-            optional AI — as implemented in the repository.
+            What Termail does today — email, synchronization, configuration,
+            and optional AI — as implemented in the repository.
           </p>
+
           <div class="two-col">
             <article class="card">
               <h3>Email over IMAP and SMTP</h3>
@@ -146,6 +213,7 @@
                 <li>SMTP needs <code>smtpHost</code> on the account; port and mode default to implicit TLS on 465.</li>
               </ul>
             </article>
+
             <article class="card">
               <h3>Local-first storage and config</h3>
               <ul>
@@ -154,6 +222,7 @@
                 <li>UI preferences: theme, pane ratio, status bar, folder icons, compact mode.</li>
               </ul>
             </article>
+
             <article class="card">
               <h3>Optional AI assistance</h3>
               <ul>
@@ -162,6 +231,7 @@
                 <li>Drafts land in compose for review — nothing is ever auto-sent.</li>
               </ul>
             </article>
+
             <article class="card">
               <h3>Built for review</h3>
               <ul>
@@ -171,6 +241,7 @@
               </ul>
             </article>
           </div>
+
           <p class="limit-note">
             Current limitation: sending works through the compose service and
             AI-drafted replies routed into compose for review. There is no
@@ -179,86 +250,137 @@
         </section>
 
         <section class="section" id="setup" aria-labelledby="setup-heading">
-          <h2 id="setup-heading">Getting started</h2>
+          <h2 id="setup-heading">Install Termail</h2>
           <p class="section-intro">
-            From the repository README. Requires Bun v1.4.1 (pinned in
-            <code>package.json</code> and CI).
+            Install the published npm package. Requires
+            <a href="https://bun.sh/">Bun v1.4.1 or later</a>.
+            You do not need to clone the repository to use Termail.
           </p>
+
           <ol class="steps">
             <li>
-              Clone and install:
+              Install globally and launch:
               <div class="command">
-                <pre><code>git clone https://github.com/arjunmaybe/Termail.git
-cd Termail
-bun install</code></pre>
-                <button class="copy-btn" type="button" data-copy="git clone https://github.com/arjunmaybe/Termail.git
-cd Termail
-bun install">Copy</button>
+                <pre><code>bun add --global @arjunmaybe/termail
+termail</code></pre>
+                <button
+                  class="copy-btn"
+                  type="button"
+                  aria-label="Copy installation commands"
+                  data-copy="bun add --global @arjunmaybe/termail&#10;termail"
+                >Copy</button>
               </div>
-            </li>
-            <li>
-              Run, build, and check:
-              <div class="command">
-                <pre><code>bun run dev
-bun run build
-bun run test:sequential
-bun run typecheck
-bun run lint</code></pre>
-                <button class="copy-btn" type="button" data-copy="bun run dev
-bun run build
-bun run test:sequential
-bun run typecheck
-bun run lint">Copy</button>
-              </div>
-            </li>
-            <li>
-              Add accounts to <code>~/.config/termail/config.json</code>, then save
-              the password once into the OS credential store (input is hidden):
-              <div class="command">
-                <pre><code>bun run src/main.ts --set-password work</code></pre>
-                <button class="copy-btn" type="button" data-copy="bun run src/main.ts --set-password work">Copy</button>
-              </div>
+              Once installed, run <code>termail</code> from any terminal
+              directory.
               <p>
-                Also available: <code>--set-oauth-token</code>,
-                <code>--delete-password</code>,
-                <code>--delete-oauth-token</code>. On platforms without OS
-                credential storage, use per-account environment variables instead
-                (see Security).
+                Package page:
+                <a href="https://www.npmjs.com/package/@arjunmaybe/termail" rel="noopener">
+                  @arjunmaybe/termail on npm
+                </a>.
               </p>
             </li>
+
+            <li>
+              Configure your email account in
+              <code>~/.config/termail/config.json</code>. Add the account's
+              IMAP details and, if you want to send mail, its
+              <code>smtpHost</code>.
+            </li>
+
+            <li>
+              On Windows, save the account password to Windows Credential
+              Manager. Replace <code>your-account-id</code> with the ID of
+              your configured account:
+              <div class="command">
+                <pre><code>termail --set-password your-account-id</code></pre>
+                <button
+                  class="copy-btn"
+                  type="button"
+                  aria-label="Copy credential setup command"
+                  data-copy="termail --set-password your-account-id"
+                >Copy</button>
+              </div>
+              Input is hidden and the secret isn't displayed. OS credential
+              storage is implemented on Windows only. On Linux and macOS,
+              configure per-account secrets with
+              <code>TERMAIL_&lt;ACCOUNT_ID&gt;_PASSWORD</code> or
+              <code>TERMAIL_&lt;ACCOUNT_ID&gt;_OAUTH_TOKEN</code>; see the
+              <a href="https://github.com/arjunmaybe/Termail/blob/main/README.md">
+                README
+              </a>
+              for details.
+            </li>
           </ol>
+
+          <h3>Develop from source</h3>
+          <p>
+            Want to contribute or run the development version? Clone the
+            <a href="https://github.com/arjunmaybe/Termail" rel="noopener">
+              source repository
+            </a>
+            and follow the development workflow:
+          </p>
+
+          <div class="command">
+            <pre><code>git clone https://github.com/arjunmaybe/Termail.git
+cd Termail
+bun install
+bun run dev</code></pre>
+            <button
+              class="copy-btn"
+              type="button"
+              aria-label="Copy development commands"
+              data-copy="git clone https://github.com/arjunmaybe/Termail.git&#10;cd Termail&#10;bun install&#10;bun run dev"
+            >Copy</button>
+          </div>
+          <p>
+            To run the checks locally, use
+            <code>bun run build</code>, <code>bun run test:sequential</code>,
+            <code>bun run typecheck</code>, and <code>bun run lint</code>.
+          </p>
         </section>
 
-        <section class="section" id="security" aria-labelledby="security-heading">
+        <section
+          class="section"
+          id="security"
+          aria-labelledby="security-heading"
+        >
           <h2 id="security-heading">Security and privacy</h2>
           <p class="section-intro">
-            A plain summary of the implementation and <a href="https://github.com/arjunmaybe/Termail/blob/main/SECURITY.md" rel="noopener">security policy</a> —
-            what stays local, what leaves the machine, and what Termail does not promise.
+            A plain summary of the implementation and
+            <a
+              href="https://github.com/arjunmaybe/Termail/blob/main/SECURITY.md"
+              rel="noopener"
+            >security policy</a> — what stays local, what leaves the machine,
+            and what Termail does not promise.
           </p>
+
           <div class="two-col">
             <article class="card">
               <h3>Local mail storage</h3>
               <p>
                 Mail is stored in a local SQLite database that is
                 <strong>not encrypted by Termail</strong>. On POSIX systems
-                Termail restricts its data directories to owner-only access; on
-                Windows no ACL hardening is performed, so configure filesystem
-                ACLs externally on shared machines.
+                Termail restricts its data directories to owner-only access;
+                on Windows no ACL hardening is performed, so configure
+                filesystem ACLs externally on shared machines.
               </p>
             </article>
+
             <article class="card">
               <h3>Credentials</h3>
               <p>
-                Passwords and tokens never live in <code>config.json</code>, the
-                mail database, logs, or issue reports. The fastest option is the
-                one-time OS credential-store save (Windows Credential Manager).
-                OS storage is implemented on Windows only; elsewhere — and for
+                Passwords and tokens never live in <code>config.json</code>,
+                the mail database, logs, or issue reports. On Windows,
+                credentials can be saved in Windows Credential Manager. OS
+                storage is implemented on Windows only; elsewhere — and for
                 headless use — set
                 <code>TERMAIL_&lt;ACCOUNT_ID&gt;_PASSWORD</code> or
-                <code>TERMAIL_&lt;ACCOUNT_ID&gt;_OAUTH_TOKEN</code>. Environment
-                variables take precedence when both are configured.
+                <code>TERMAIL_&lt;ACCOUNT_ID&gt;_OAUTH_TOKEN</code>.
+                Environment variables take precedence when both are configured.
               </p>
             </article>
+
             <article class="card">
               <h3>What the AI provider receives</h3>
               <p>
@@ -270,13 +392,14 @@ bun run lint">Copy</button>
                 Output is display text or a draft for review.
               </p>
             </article>
+
             <article class="card">
               <h3>Reporting</h3>
               <p>
-                Only the latest <code>main</code> commit receives security fixes.
-                Report issues through GitHub private vulnerability reporting with
-                redacted material — never live credentials or mailbox contents.
-                There is no paid bounty program.
+                Only the latest <code>main</code> commit receives security
+                fixes. Report issues through GitHub private vulnerability
+                reporting with redacted material — never live credentials or
+                mailbox contents. There is no paid bounty program.
               </p>
             </article>
           </div>
@@ -284,48 +407,112 @@ bun run lint">Copy</button>
 
         <section class="section" id="faq" aria-labelledby="faq-heading">
           <h2 id="faq-heading">Frequently asked questions</h2>
+
           <div class="faq">
             <details>
-              <summary>What do I need to run Termail?</summary>
-              <p>Bun v1.4.1, a clone of the repository, and <code>bun install</code>. You also need at least one email account with IMAP details (and <code>smtpHost</code> if you want to send).</p>
+              <summary>How do I install Termail?</summary>
+              <p>
+                Install <a href="https://bun.sh/">Bun v1.4.1 or later</a>,
+                then run <code>bun add --global @arjunmaybe/termail</code>.
+                Launch it with <code>termail</code>. You don't need to clone
+                the repository to use the published package.
+              </p>
             </details>
+
+            <details>
+              <summary>What do I need to use Termail?</summary>
+              <p>
+                Bun v1.4.1 or later and an email account with IMAP details.
+                Configure <code>smtpHost</code> if you want to send mail.
+                Account configuration and credentials are provided by each user.
+              </p>
+            </details>
+
             <details>
               <summary>Where does my configuration live?</summary>
-              <p>At <code>~/.config/termail/config.json</code> (version 1), validated with Zod. It holds database path, UI preferences, accounts, and AI settings — never secrets.</p>
+              <p>
+                At <code>~/.config/termail/config.json</code> (version 1),
+                validated with Zod. It holds the database path, UI preferences,
+                accounts, and AI settings — never secrets.
+              </p>
             </details>
+
             <details>
               <summary>How are passwords handled on Linux or macOS?</summary>
-              <p>OS credential storage is Windows-only today. On other platforms, set per-account secrets in the environment: <code>TERMAIL_&lt;ACCOUNT_ID&gt;_PASSWORD</code> or <code>TERMAIL_&lt;ACCOUNT_ID&gt;_OAUTH_TOKEN</code>.</p>
+              <p>
+                OS credential storage is Windows-only today. On other platforms,
+                set per-account secrets in the environment:
+                <code>TERMAIL_&lt;ACCOUNT_ID&gt;_PASSWORD</code> or
+                <code>TERMAIL_&lt;ACCOUNT_ID&gt;_OAUTH_TOKEN</code>.
+              </p>
             </details>
+
             <details>
               <summary>Is my local mail database encrypted?</summary>
-              <p>No. Termail does not encrypt the SQLite database. POSIX systems get owner-only directories and files; Windows needs externally configured filesystem ACLs on shared machines.</p>
+              <p>
+                No. Termail does not encrypt the SQLite database. POSIX systems
+                get owner-only directories and files; Windows needs externally
+                configured filesystem ACLs on shared machines.
+              </p>
             </details>
+
             <details>
               <summary>Does the AI act on my mailbox?</summary>
-              <p>No. AI only summarizes or drafts when you explicitly press <kbd>s</kbd> or <kbd>d</kbd>. Drafts go into compose for review and nothing is auto-sent. AI is off by default.</p>
+              <p>
+                No. AI only summarizes or drafts when you explicitly press
+                <kbd>s</kbd> or <kbd>d</kbd>. Drafts go into compose for review
+                and nothing is auto-sent. AI is off by default.
+              </p>
             </details>
+
             <details>
               <summary>Can I compose and send a new message today?</summary>
-              <p>Sending works through the compose service and AI-drafted replies routed into compose for review. There is no full-screen compose editor yet.</p>
+              <p>
+                Sending works through the compose service and AI-drafted
+                replies routed into compose for review. There is no full-screen
+                compose editor yet.
+              </p>
+            </details>
+
+            <details>
+              <summary>What license does Termail use?</summary>
+              <p>
+                Termail is released under the
+                <a href="https://github.com/arjunmaybe/Termail/blob/main/LICENSE">
+                  MIT License
+                </a>.
+              </p>
             </details>
           </div>
         </section>
       </div>
     </main>
+
     <footer class="site-footer">
       <div class="wrap footer-inner">
         <div class="footer-brand">
           <p class="footer-title">Termail</p>
-          <p class="footer-note">A terminal email client. Source is public at github.com/arjunmaybe/Termail. No license file is currently present in the repository.</p>
+          <p class="footer-note">
+            A terminal email client distributed through
+            <a href="https://www.npmjs.com/package/@arjunmaybe/termail" rel="noopener">
+              npm
+            </a>.
+            Open source under the
+            <a href="https://github.com/arjunmaybe/Termail/blob/main/LICENSE">
+              MIT License
+            </a>.
+          </p>
         </div>
+
         <nav class="footer-nav" aria-label="Project links">
+          <a href="https://www.npmjs.com/package/@arjunmaybe/termail" rel="noopener">Install from npm</a>
           <a href="https://github.com/arjunmaybe/Termail" rel="noopener">Source repository</a>
           <a href="https://github.com/arjunmaybe/Termail/blob/main/README.md" rel="noopener">Documentation (README)</a>
           <a href="https://github.com/arjunmaybe/Termail/blob/main/SECURITY.md" rel="noopener">Security policy</a>
         </nav>
       </div>
     </footer>
+
     <script src="script.js" defer></script>
   </body>
 </html>
