@@ -11,6 +11,7 @@
  *   - No drafts persistence, no Sent-folder writes, no background sending.
  */
 
+import { validateAddress } from '../../core/smtp/message.js';
 import type { SendOutcome, SmtpService } from '../../core/smtp/SmtpService.js';
 import { actions, selectors } from '../../core/state/AppState.js';
 import type { AccountConfig } from '../../core/types/config.js';
@@ -30,6 +31,45 @@ export class ComposeController {
   /** Open compose with a cleared buffer. Does not touch search state. */
   openCompose(): void {
     actions.openCompose();
+  }
+
+  /**
+   * Open compose already populated with a draft (used by the AI reply
+   * flow). Recipients, subject, and body are applied atomically and the
+   * Body field takes focus once the native editor has received the text,
+   * so an AI-prefilled draft never lands half-applied or with the wrong
+   * focus. Never sends.
+   */
+  openComposeDraft(draft: {
+    to?: string[];
+    cc?: string[];
+    bcc?: string[];
+    subject?: string;
+    body?: string;
+  }): void {
+    actions.openComposeWith({
+      to: draft.to ?? [],
+      cc: draft.cc ?? [],
+      bcc: draft.bcc ?? [],
+      subject: draft.subject ?? '',
+      body: draft.body ?? '',
+      focus: 'body',
+    });
+  }
+
+  /**
+   * True when any composer field holds content. Used by the discard
+   * policy: an empty composer closes immediately, a non-empty one asks
+   * for confirmation.
+   */
+  hasContent(): boolean {
+    return (
+      selectors.composeTo.length > 0 ||
+      selectors.composeCc.length > 0 ||
+      selectors.composeBcc.length > 0 ||
+      selectors.composeSubject.trim().length > 0 ||
+      selectors.composeBody.trim().length > 0
+    );
   }
 
   /** Close compose and clear the buffer. Does not touch search state. */
@@ -91,6 +131,29 @@ export class ComposeController {
       };
       actions.setComposeError(outcome.message);
       return outcome;
+    }
+
+    // Validate every recipient locally *before* the SMTP service builds a
+    // transport. The transport builder re-validates as a backstop, but
+    // rejecting here guarantees a malformed address (including CR/LF
+    // injection) never reaches the constructor or opens a socket.
+    const recipientGroups: Array<{ field: string; values: string[] }> = [
+      { field: 'To', values: to },
+      { field: 'Cc', values: cc },
+      { field: 'Bcc', values: bcc },
+    ];
+    for (const { field, values } of recipientGroups) {
+      for (let i = 0; i < values.length; i += 1) {
+        const value = values[i] as string;
+        try {
+          validateAddress(value, `${field}[${i}]`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const outcome: SendOutcome = { kind: 'validation', message };
+          actions.setComposeError(message);
+          return outcome;
+        }
+      }
     }
 
     actions.setComposeSending(true);

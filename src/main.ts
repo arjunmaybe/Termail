@@ -7,6 +7,7 @@
 import { createCliRenderer } from '@opentui/core';
 import { App } from './app/App.js';
 import { routeKeypress } from './app/KeyRouter.js';
+import { RENDERER_OPTIONS } from './app/rendererOptions.js';
 import {
   type CredentialSetupRequest,
   defaultSetupDeps,
@@ -49,10 +50,9 @@ async function main(): Promise<void> {
   let renderer: Awaited<ReturnType<typeof createCliRenderer>> | null = null;
 
   try {
-    renderer = await createCliRenderer({
-      exitOnCtrlC: true,
-      useMouse: false,
-    });
+    // `RENDERER_OPTIONS` disables OpenTUI's own Ctrl+C destroy handler so
+    // Ctrl+C is routed through the application (see the module doc).
+    renderer = await createCliRenderer({ ...RENDERER_OPTIONS });
 
     const app = new App(renderer, { id: 'app', initialTheme: 'dark' });
     renderer.root.add(app);
@@ -73,6 +73,18 @@ async function main(): Promise<void> {
       process.exit(0);
     };
 
+    // Ctrl+C arrives as a keypress (not SIGINT) in the TUI's raw mode. A
+    // real SIGINT (e.g. `kill -INT`) must not discard a non-empty composer
+    // without confirmation either: route it through the discard policy
+    // while composing, and keep the immediate shutdown outside it.
+    const handleSigint = (): void => {
+      if (app.isComposeActive()) {
+        app.requestComposeDiscard();
+        return;
+      }
+      shutdown();
+    };
+
     // Bind global keyboard shortcuts. All key routing lives in
     // `routeKeypress` (src/app/KeyRouter.ts) so it can be tested
     // without a live renderer.
@@ -80,7 +92,7 @@ async function main(): Promise<void> {
       routeKeypress(key, app, { onShutdown: shutdown });
     });
 
-    process.on('SIGINT', shutdown);
+    process.on('SIGINT', handleSigint);
     process.on('SIGTERM', shutdown);
 
     renderer.start();

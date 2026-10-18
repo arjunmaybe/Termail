@@ -8,9 +8,41 @@ import {
   buildMessage,
   dotStuffBody,
   normalizeBodyLines,
+  parseRecipientList,
   validateAddress,
 } from '../../src/core/smtp/message.js';
 import { ValidationError } from '../../src/core/utils/errors.js';
+
+describe('parseRecipientList', () => {
+  it('splits on commas, semicolons and newlines', () => {
+    expect(parseRecipientList('a@x.com, b@y.com')).toEqual(['a@x.com', 'b@y.com']);
+    expect(parseRecipientList('a@x.com; b@y.com')).toEqual(['a@x.com', 'b@y.com']);
+    expect(parseRecipientList('a@x.com\nb@y.com')).toEqual(['a@x.com', 'b@y.com']);
+    expect(parseRecipientList('a@x.com, b@y.com; c@z.com\n d@w.com')).toEqual([
+      'a@x.com',
+      'b@y.com',
+      'c@z.com',
+      'd@w.com',
+    ]);
+  });
+
+  it('trims whitespace and drops empty entries', () => {
+    expect(parseRecipientList('  a@x.com  ')).toEqual(['a@x.com']);
+    expect(parseRecipientList('a@x.com,,  ,;b@y.com')).toEqual(['a@x.com', 'b@y.com']);
+    expect(parseRecipientList('')).toEqual([]);
+    expect(parseRecipientList('   ')).toEqual([]);
+    expect(parseRecipientList(',;,\n')).toEqual([]);
+  });
+
+  it('keeps a trailing separator from producing an empty address', () => {
+    expect(parseRecipientList('a@x.com,')).toEqual(['a@x.com']);
+  });
+
+  it('does not validate or reject malformed entries', () => {
+    // Validation happens before transport construction, not here.
+    expect(parseRecipientList('not-an-email, a@x.com')).toEqual(['not-an-email', 'a@x.com']);
+  });
+});
 
 describe('validateAddress', () => {
   it('accepts normal addresses', () => {

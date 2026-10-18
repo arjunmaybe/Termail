@@ -41,7 +41,7 @@ describe('B3 StatusBar keyboard hints', () => {
     const bar = new StatusBar(renderer, { themeMode: 'dark' });
     try {
       const ids = hintIds(bar);
-      for (const expected of ['kbd-q', 'kbd-/', 'kbd-r', 'kbd-s', 'kbd-d']) {
+      for (const expected of ['kbd-q', 'kbd-/', 'kbd-r', 'kbd-s', 'kbd-d', 'kbd-c']) {
         expect(ids).toContain(expected);
       }
       for (const omitted of [

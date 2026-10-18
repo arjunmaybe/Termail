@@ -7,6 +7,8 @@
  *  3. active compose + s => compose and AI state remain unaffected
  *  4. compose opened while AI is in flight => stale AI result does not
  *     overwrite the newly opened buffer (post-await guard)
+ *  5. selected email changed while AI is in flight => no composer opens
+ *     and no field is populated with mismatched recipient/subject data
  */
 
 import { existsSync, rmSync } from 'node:fs';
@@ -260,6 +262,56 @@ describe('B2 App AI/compose guard', () => {
       expect(selectors.composeTo).toEqual(['carol@example.com']);
       expect(selectors.composeSubject).toBe('Manual subject');
       expect(selectors.composeBody).toBe('Manual body');
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('selected email changed while AI is in flight => no mismatched draft opens', async () => {
+    let resolveDraft!: (v: { kind: 'ok'; text: string }) => void;
+    const draftReply = vi.fn(
+      () =>
+        new Promise<{ kind: 'ok'; text: string }>((resolve) => {
+          resolveDraft = resolve;
+        })
+    );
+    const summarizeEmail = vi.fn(async () => ({ kind: 'ok' as const, text: 'SUMMARY' }));
+    const fakeAi = { draftReply, summarizeEmail };
+    const { app, renderer } = await makeAppWithFakeAi(fakeAi);
+    try {
+      const emailA = makeEmail({
+        id: 'work:INBOX:1',
+        messageId: '<m-1@example.com>',
+        subject: 'Q3 planning',
+        fromAddresses: [{ name: 'Alice', address: 'alice@example.com' }],
+      });
+      const emailB = makeEmail({
+        id: 'work:INBOX:2',
+        messageId: '<m-2@example.com>',
+        subject: 'Budget review',
+        fromAddresses: [{ name: 'Bob', address: 'bob@example.com' }],
+      });
+      actions.setEmails([emailA, emailB]);
+      actions.setSelectedEmail(emailA.id);
+      expect(selectors.composeActive).toBe(false);
+
+      // AI reply for email A starts.
+      const pending = app.draftReplyWithAi();
+      expect(selectors.aiLoading).toBe(true);
+
+      // The user moves the selection to email B before A's reply arrives.
+      actions.setSelectedEmail(emailB.id);
+
+      // A's reply resolves: it must not be paired with B's recipient/subject.
+      resolveDraft({ kind: 'ok', text: 'AI DRAFT FOR A' });
+      await pending;
+
+      expect(selectors.composeActive).toBe(false);
+      expect(selectors.composeTo).toEqual([]);
+      expect(selectors.composeSubject).toBe('');
+      expect(selectors.composeBody).toBe('');
+      expect(selectors.statusMessage).toBe('AI draft cancelled: the selected email changed');
     } finally {
       renderer.stop();
       renderer.destroy();
