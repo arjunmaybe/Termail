@@ -39,7 +39,6 @@ Once installed, run `termail` from any terminal directory.
 
 Each user must configure their own email account and credentials.
 
-
 ### Prerequisites
 
 - [Bun](https://bun.sh/) v1.4.1 (see `packageManager` in `package.json`; CI pins the same version)
@@ -195,4 +194,4 @@ account; `smtpPort`/`smtpMode` default to implicit-tls/465.
 
 ## License
 
-No license file is present in this repository.
+Termail is released under the [MIT License](LICENSE).
