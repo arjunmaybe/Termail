@@ -448,9 +448,17 @@ export class App extends BoxRenderable {
         break;
       }
       case 'auth':
+        if (outcome.replacedFolderIds && outcome.replacedFolderIds.length > 0) {
+          // A committed replacement's rows were deleted from the DB before
+          // the failure; in-memory search hits may still reference them.
+          actions.clearSearch();
+        }
         actions.setSyncError(outcome.message);
         break;
       case 'network':
+        if (outcome.replacedFolderIds && outcome.replacedFolderIds.length > 0) {
+          actions.clearSearch();
+        }
         actions.setSyncError(outcome.message);
         break;
       case 'no-account':
@@ -537,6 +545,11 @@ export class App extends BoxRenderable {
         // a reload failure must not mask the original sync error.
         if (accountStillRelevant) {
           this.reloadFoldersForAccount(accountId);
+        }
+        if (outcome.replacedFolderIds && outcome.replacedFolderIds.length > 0) {
+          // A committed replacement's rows were deleted from the DB before
+          // the failure; in-memory search hits may still reference them.
+          actions.clearSearch();
         }
         actions.setSyncError(
           outcome.kind === 'no-account' ? 'No account configured' : outcome.message

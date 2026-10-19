@@ -64,18 +64,30 @@ export type SyncOutcome =
   | {
       kind: 'auth';
       message: string;
+      /**
+       * Present only when a replacement committed before a later failure
+       * (e.g. a post-persistence read). The TUI must still clear stale
+       * search hits for these folders.
+       */
+      replacedFolderIds?: string[];
     }
   | {
       kind: 'network';
       message: string;
+      /** See the `auth` variant. */
+      replacedFolderIds?: string[];
     }
   | {
       kind: 'no-account';
       message: string;
+      /** See the `auth` variant. */
+      replacedFolderIds?: string[];
     }
   | {
       kind: 'no-folder';
       message: string;
+      /** See the `auth` variant. */
+      replacedFolderIds?: string[];
     };
 
 /**
@@ -143,11 +155,11 @@ export class SyncService {
         return { kind: 'no-folder', message: 'No selectable folders on server' };
       }
 
+      const folderId = deriveFolderId(account.id, target.path);
+      const checkpoint = this.repository.getSyncState(account.id, folderId);
       let result: Awaited<ReturnType<typeof imap.syncMessages>>;
       let replaced = false;
       try {
-        const folderId = deriveFolderId(account.id, target.path);
-        const checkpoint = this.repository.getSyncState(account.id, folderId);
         const limits = buildImapSyncLimits(checkpoint);
         result = await imap.syncMessages(target.path, buildSyncOptions(checkpoint, limits));
         replaced = shouldReplaceFolder(checkpoint, result);
@@ -166,24 +178,39 @@ export class SyncService {
         return mapMessageError(error);
       }
 
-      const persistedFolders = this.repository.listFoldersForAccount(account.id);
-      const targetId = persistedFolders.find((f) => f.fullName === target.path)?.id ?? null;
-      const messages = targetId ? this.repository.listByFolder(account.id, targetId, 500) : [];
+      // The replacement (if any) is committed at this point. Preserve its
+      // invalidation signal even if the post-sync reads below fail.
+      const replacedFolderIds = replaced ? [folderId] : [];
 
-      logger.info('Sync completed', {
-        accountId: account.id,
-        folder: target.path,
-        folders: persistedFolders.length,
-        messages: messages.length,
-        replaced,
-      });
+      try {
+        const persistedFolders = this.repository.listFoldersForAccount(account.id);
+        const messages = this.repository.listByFolder(account.id, folderId, 500);
 
-      return {
-        kind: 'ok',
-        folders: persistedFolders,
-        messages,
-        replacedFolderIds: replaced && targetId ? [targetId] : [],
-      };
+        logger.info('Sync completed', {
+          accountId: account.id,
+          folder: target.path,
+          folders: persistedFolders.length,
+          messages: messages.length,
+          replaced,
+        });
+
+        return {
+          kind: 'ok',
+          folders: persistedFolders,
+          messages,
+          replacedFolderIds,
+        };
+      } catch (error) {
+        logger.warn('Sync persisted but post-sync reads failed', {
+          accountId: account.id,
+          folder: target.path,
+          error: getErrorMessage(error),
+        });
+        return {
+          ...mapMessageError(error),
+          ...(replaced ? { replacedFolderIds } : {}),
+        };
+      }
     } finally {
       try {
         await imap.disconnect();
@@ -271,11 +298,11 @@ export class SyncService {
       // means a full sync. `MAX()` in the repository guarantees the
       // checkpoint never regresses, so a stale or empty batch cannot move
       // it backwards.
+      const folderId = deriveFolderId(account.id, target.path);
+      const checkpoint = this.repository.getSyncState(account.id, folderId);
       let result: Awaited<ReturnType<typeof imap.syncMessages>>;
       let replaced = false;
       try {
-        const folderId = deriveFolderId(account.id, target.path);
-        const checkpoint = this.repository.getSyncState(account.id, folderId);
         const limits = buildImapSyncLimits(checkpoint);
         result = await imap.syncMessages(imapFolderPath, buildSyncOptions(checkpoint, limits));
         replaced = shouldReplaceFolder(checkpoint, result);
@@ -294,28 +321,43 @@ export class SyncService {
         throw error;
       }
 
+      // The replacement (if any) is committed at this point. Preserve its
+      // invalidation signal even if the post-sync reads below fail.
+      const replacedFolderIds = replaced ? [folderId] : [];
+
       // Build the post-sync folder list straight from the DB so the
       // caller sees exactly what `MessageRepository.listFoldersForAccount`
       // would return, including any folders the server didn't list this
       // time but were already persisted from prior runs.
-      const persistedFolders = this.repository.listFoldersForAccount(account.id);
-      const targetId = persistedFolders.find((f) => f.fullName === imapFolderPath)?.id ?? null;
-      const messages = targetId ? this.repository.listByFolder(account.id, targetId, 500) : [];
+      try {
+        const persistedFolders = this.repository.listFoldersForAccount(account.id);
+        const messages = this.repository.listByFolder(account.id, folderId, 500);
 
-      logger.info('Sync completed', {
-        accountId: account.id,
-        folder: imapFolderPath,
-        folders: persistedFolders.length,
-        messages: messages.length,
-        replaced,
-      });
+        logger.info('Sync completed', {
+          accountId: account.id,
+          folder: imapFolderPath,
+          folders: persistedFolders.length,
+          messages: messages.length,
+          replaced,
+        });
 
-      return {
-        kind: 'ok',
-        folders: persistedFolders,
-        messages,
-        replacedFolderIds: replaced && targetId ? [targetId] : [],
-      };
+        return {
+          kind: 'ok',
+          folders: persistedFolders,
+          messages,
+          replacedFolderIds,
+        };
+      } catch (error) {
+        logger.warn('Sync persisted but post-sync reads failed', {
+          accountId: account.id,
+          folder: imapFolderPath,
+          error: getErrorMessage(error),
+        });
+        return {
+          ...mapMessageError(error),
+          ...(replaced ? { replacedFolderIds } : {}),
+        };
+      }
     } finally {
       try {
         await imap.disconnect();

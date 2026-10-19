@@ -230,6 +230,57 @@ describe('App.requestSync fresh-account bootstrap', () => {
     }
   });
 
+  it('clears stale search hits after a committed replacement even when the post-persistence read fails', async () => {
+    const fake = {
+      syncAccountFolder: vi.fn(),
+      syncAccount: vi.fn().mockResolvedValue({
+        kind: 'network',
+        message: 'folder read failed',
+        replacedFolderIds: ['personal:INBOX'],
+      } satisfies SyncOutcome),
+    };
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('old generation');
+      actions.setSearchHits([]);
+
+      await app.requestSync();
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('folder read failed');
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('does not clear search hits when bootstrap persistence fails before a committed replacement', async () => {
+    const fake = {
+      syncAccountFolder: vi.fn(),
+      syncAccount: vi.fn().mockResolvedValue({
+        kind: 'network',
+        message: 'persist failed',
+      } satisfies SyncOutcome),
+    };
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('still current');
+      actions.setSearchHits([]);
+
+      await app.requestSync();
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('persist failed');
+      expect(selectors.searchHits).toEqual([]);
+      expect(selectors.searchActive).toBe(true);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
   it('blocks a second r while bootstrapping (single-flight)', async () => {
     let resolveBoot!: (o: SyncOutcome) => void;
     const fake = {

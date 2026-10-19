@@ -231,6 +231,80 @@ describe('App.requestSync', () => {
     }
   });
 
+  it('clears stale search hits when a committed replacement is followed by a read failure', async () => {
+    const fake = makeFakeSyncService();
+    fake.syncAccountFolder.mockResolvedValueOnce({
+      kind: 'network',
+      message: 'folder read failed',
+      replacedFolderIds: ['work:INBOX'],
+    });
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('old generation');
+      actions.setSearchHits([]);
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('folder read failed');
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('clears stale search hits when a committed replacement is followed by an auth failure', async () => {
+    const fake = makeFakeSyncService();
+    fake.syncAccountFolder.mockResolvedValueOnce({
+      kind: 'auth',
+      message: 'db auth failed',
+      replacedFolderIds: ['work:INBOX'],
+    });
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('old generation');
+      actions.setSearchHits([]);
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('db auth failed');
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('does not clear search hits when persistence fails before a committed replacement', async () => {
+    const fake = makeFakeSyncService();
+    fake.syncAccountFolder.mockResolvedValueOnce({
+      kind: 'network',
+      message: 'persist failed',
+    });
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('still current');
+      actions.setSearchHits([]);
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('persist failed');
+      expect(selectors.searchHits).toEqual([]);
+      expect(selectors.searchActive).toBe(true);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
   it('is a no-op when a sync for the same (account, folder) is already in flight', async () => {
     const fake = makeFakeSyncService();
     let resolveSync!: (outcome: SyncOutcome) => void;
