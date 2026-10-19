@@ -8,17 +8,17 @@
  *     `id = ${accountId}:${folderId}:${uid}`).
  *   - Per-(account, folder) sync state (`folder_sync_state`).
  *
- * Design notes (Phase 2.4 review, v4 update):
+ * Design notes (Phase 2.4 review, v5 update):
  *   - The application id is derived from the synchronization identity,
  *     not from `message_id`, so an empty `messageId` is still upsertable.
- *     Missing Message-IDs are stored as NULL (v4 schema makes
- *     `message_id` nullable); SQLite treats NULLs as distinct in the
- *     legacy UNIQUE, so multiple missing IDs coexist in one folder.
- *     Reads coerce NULL back to `''`.
+ *     Missing Message-IDs are stored as NULL (v4 made `message_id`
+ *     nullable), so multiple missing IDs coexist in one folder. Reads
+ *     coerce NULL back to `''`.
  *   - The `(account_id, folder_id, uid)` unique index is the
  *     synchronization identity. The legacy
- *     `UNIQUE (account_id, folder_id, message_id)` constraint is left
- *     in place as a defense-in-depth index for non-empty Message-IDs.
+ *     `UNIQUE (account_id, folder_id, message_id)` constraint was
+ *     removed by v5: distinct UIDs may legitimately share a Message-ID.
+ *     `message_id` is lookup data, not a mailbox identity.
  *   - `highest_uid` is updated with `MAX(highest_uid, excluded.highest_uid)`
  *     so it never regresses. Partial / error status updates omit the
  *     `highest_uid` column from the `SET` clause entirely.
@@ -132,6 +132,17 @@ export interface UpsertMessagesResult {
   inserted: number;
   updated: number;
   highestUid: number;
+}
+
+/** Options for `upsertMessages`. */
+export interface UpsertMessagesOptions {
+  /**
+   * Highest UID whose FETCH range completed successfully. Used to advance
+   * the checkpoint across expunged UID gaps even when the range contained
+   * no messages. Must only be set after the whole range was fetched
+   * successfully; never after a fetch or persistence failure.
+   */
+  scannedThroughUid?: number;
 }
 
 /** Options for `markSyncPartial` / `markSyncError`. */
@@ -411,15 +422,22 @@ export class MessageRepository {
    * and atomically advance the folder's sync state. All writes happen
    * inside a single transaction; on any failure nothing is persisted.
    *
+   * The checkpoint is the greater of the highest persisted message UID and
+   * `options.scannedThroughUid`. The latter lets a fully fetched range that
+   * contained only expunged UIDs advance past the gap. An empty batch with
+   * no scanned-through UID remains a no-op.
+   *
    * Returns counts plus the new `highest_uid`. `last_sync_status` is
    * reset to `'ok'` and `last_error` is cleared.
    */
   upsertMessages(
     account: SafeAccountInput,
     folder: SyncFolder,
-    messages: ReadonlyArray<SyncMessage>
+    messages: ReadonlyArray<SyncMessage>,
+    options: UpsertMessagesOptions = {}
   ): UpsertMessagesResult {
-    if (messages.length === 0) {
+    const scannedThroughUid = options.scannedThroughUid ?? 0;
+    if (messages.length === 0 && scannedThroughUid <= 0) {
       return { inserted: 0, updated: 0, highestUid: 0 };
     }
 
@@ -470,7 +488,7 @@ export class MessageRepository {
 
     let inserted = 0;
     let updated = 0;
-    let highestUid = 0;
+    let highestUid = scannedThroughUid;
 
     try {
       this.database.transaction(() => {
@@ -819,7 +837,10 @@ export function persistSyncResult(
   if (status !== 'ok' && !options.error) {
     throw new DatabaseError(`persistSyncResult: status="${status}" requires options.error`);
   }
-  const upsert = repo.upsertMessages(account, folder, result.messages);
+  const upsert = repo.upsertMessages(account, folder, result.messages, {
+    // The scanned-through watermark is only valid for a clean result.
+    ...(status === 'ok' ? { scannedThroughUid: result.scannedThroughUid } : {}),
+  });
   if (status === 'partial') {
     repo.markSyncPartial(account, folder, options.error as string);
   } else if (status === 'error') {

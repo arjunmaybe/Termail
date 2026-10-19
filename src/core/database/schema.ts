@@ -19,13 +19,19 @@
  *
  * v4 lives in `migrations/v4.sql.ts`. v4 rebuilds `emails` so
  * `message_id` becomes nullable (missing Message-IDs are stored as
- * NULL, which never collides in the legacy
- * `UNIQUE (account_id, folder_id, message_id)` constraint), converts
- * legacy `''` values to NULL, and rebuilds indexes + FTS5 + triggers.
- * The `(account_id, folder_id, uid)` identity is preserved.
+ * NULL), converts legacy `''` values to NULL, and rebuilds indexes +
+ * FTS5 + triggers. The `(account_id, folder_id, uid)` identity is
+ * preserved.
+ *
+ * v5 lives in `migrations/v5.sql.ts`. v5 rebuilds `emails` again to
+ * remove the legacy `UNIQUE (account_id, folder_id, message_id)`
+ * constraint. The synchronization identity remains
+ * `(account_id, folder_id, uid)`; Message-ID is lookup data, not a
+ * mailbox identity. Existing rows, ids, rowids, values, indexes, FTS5,
+ * and triggers are preserved.
  */
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const CREATE_TABLES_V1_SQL = `
 -- Accounts table

@@ -284,32 +284,31 @@ export async function normalizeFetchedMessage(args: {
   };
 }
 
-/**
- * Dedupe a list of normalized messages. Primary key is UID; secondary
- * key is a non-empty Message-ID. First occurrence wins, preserving the
- * input order. Returns `{ unique, deduped }` where `deduped` is the
- * number of dropped entries.
- */
-export function dedupeMessages(messages: ReadonlyArray<SyncMessage>): {
+/** Result of `dedupeMessages`. */
+export interface DedupeResult {
+  /** Messages that survived UID deduplication. */
   unique: SyncMessage[];
+  /** Number of duplicate UID entries that were dropped. */
   deduped: number;
-} {
+}
+
+/**
+ * Dedupe a list of normalized messages by IMAP UID. First occurrence
+ * wins, preserving input order. Message-ID is deliberately not part of
+ * the identity: distinct UIDs may legitimately share a Message-ID, and
+ * both must reach persistence so the checkpoint can advance past them.
+ */
+export function dedupeMessages(messages: ReadonlyArray<SyncMessage>): DedupeResult {
   const seenUids = new Set<number>();
-  const seenMessageIds = new Set<string>();
   const unique: SyncMessage[] = [];
   for (const m of messages) {
     if (seenUids.has(m.uid)) {
       continue;
     }
-    if (m.messageId.length > 0) {
-      if (seenMessageIds.has(m.messageId)) {
-        continue;
-      }
-      seenMessageIds.add(m.messageId);
-    }
     seenUids.add(m.uid);
     unique.push(m);
   }
+
   return { unique, deduped: messages.length - unique.length };
 }
 

@@ -300,6 +300,13 @@ export class ImapService {
       const collected: SyncMessage[] = [];
       let total = 0;
 
+      // If every batch below succeeds, the entire range through the last
+      // batch's `to` has been queried. UIDs in that range that returned no
+      // message were expunged; UIDs are never reused within a UIDVALIDITY
+      // generation, so this upper bound is safe to record as scanned.
+      const lastBatch = batches.length > 0 ? batches[batches.length - 1] : undefined;
+      const scannedThroughUid = lastBatch?.to;
+
       for (const batch of batches) {
         const range = `${batch.from}:${batch.to}`;
         let raw: Awaited<ReturnType<typeof client.fetchAll>>;
@@ -324,11 +331,13 @@ export class ImapService {
 
       const deduped = dedupeMessages(collected);
       const messages = sortNewestFirst(deduped.unique);
+
       return {
         folder: folderPath,
         total,
         parsed: messages.length,
         deduped: deduped.deduped,
+        ...(scannedThroughUid !== undefined ? { scannedThroughUid } : {}),
         messages,
       };
     } finally {

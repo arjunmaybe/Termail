@@ -427,11 +427,28 @@ describe('dedupeMessages', () => {
     expect(r.deduped).toBe(1);
   });
 
-  it('keeps the first occurrence of a duplicate Message-ID', () => {
+  it('keeps distinct UIDs that share a Message-ID', () => {
     const a = mk(1, 'same@x');
     const b = mk(2, 'same@x');
     const r = dedupeMessages([a, b]);
-    expect(r.unique).toEqual([a]);
+    expect(r.unique).toEqual([a, b]);
+    expect(r.deduped).toBe(0);
+  });
+
+  it('keeps multiple shared-Message-ID UIDs and later unique messages', () => {
+    const r = dedupeMessages([
+      mk(1, 'same@x'),
+      mk(2, 'same@x'),
+      mk(3, 'same@x'),
+      mk(4, 'later-unique@x'),
+    ]);
+    expect(r.unique.map((m) => m.uid)).toEqual([1, 2, 3, 4]);
+    expect(r.deduped).toBe(0);
+  });
+
+  it('dedupes by UID even when the duplicate changes its Message-ID', () => {
+    const r = dedupeMessages([mk(1, 'same@x'), mk(2, 'same@x'), mk(2, 'different@x')]);
+    expect(r.unique.map((m) => m.uid)).toEqual([1, 2]);
     expect(r.deduped).toBe(1);
   });
 
@@ -532,7 +549,11 @@ function makeFactory(fake: FakeImapFlow): ImapFlowFactory {
   };
 }
 
-function makeRawFetchedMessage(uid: number, subject: string): FetchMessageObject {
+function makeRawFetchedMessage(
+  uid: number,
+  subject: string,
+  messageId = `<msg-${uid}@example.com>`
+): FetchMessageObject {
   return {
     seq: uid,
     uid,
@@ -540,7 +561,7 @@ function makeRawFetchedMessage(uid: number, subject: string): FetchMessageObject
     flags: new Set(uid % 2 === 0 ? ['\\Seen'] : []),
     envelope: {
       subject,
-      messageId: `<msg-${uid}@example.com>`,
+      messageId,
       from: [{ name: 'Alice', address: 'alice@example.com' }],
       to: [{ address: 'me@example.com' }],
       cc: [],
@@ -623,6 +644,31 @@ describe('ImapService.syncMessages', () => {
     expect(result.total).toBe(2);
     expect(result.parsed).toBe(1);
     expect(result.deduped).toBe(1);
+    // UID 1 survives, so the empty UID 2 gap may still be marked scanned.
+    expect(result.scannedThroughUid).toBe(2);
+  });
+
+  it('returns every distinct UID that shares a Message-ID', async () => {
+    fake.mailboxOpen.mockResolvedValueOnce({
+      path: 'INBOX',
+      delimiter: '/',
+      flags: new Set<string>(),
+      uidNext: 5,
+      uidValidity: 1n,
+      exists: 4,
+    });
+    fake.fetchAll.mockResolvedValueOnce([
+      makeRawFetchedMessage(1, 'first', '<shared@example.com>'),
+      makeRawFetchedMessage(2, 'second', '<shared@example.com>'),
+      makeRawFetchedMessage(3, 'third', '<shared@example.com>'),
+      makeRawFetchedMessage(4, 'later unique', '<unique@example.com>'),
+    ]);
+    const result = await service.syncMessages('INBOX');
+    expect(result.total).toBe(4);
+    expect(result.parsed).toBe(4);
+    expect(result.deduped).toBe(0);
+    expect(result.messages.map((m) => m.uid)).toEqual([4, 3, 2, 1]);
+    expect(result.scannedThroughUid).toBe(4);
   });
 
   it('honors maxMessages cap', async () => {

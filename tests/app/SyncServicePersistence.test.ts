@@ -8,8 +8,8 @@
  *     folders and messages.
  *   - Same Message-ID can exist in different folders (not collapsed).
  *   - The identity `(account_id, folder_id, uid)` is the real primary key;
- *     two distinct UIDs with the same Message-ID in the same folder are
- *     rejected by the legacy `UNIQUE (account, folder, message_id)`.
+ *     two distinct UIDs with the same Message-ID in the same folder both
+ *     persist.
  *   - Persistence is independent of the in-memory `ImapService` fake.
  */
 
@@ -25,7 +25,6 @@ import type { FolderSyncResult, SyncFolder } from '../../src/core/imap/folders.j
 import type { ImapService } from '../../src/core/imap/ImapService.js';
 import type { MessageSyncResult, SyncMessage } from '../../src/core/imap/types.js';
 import type { AccountConfig, AppConfig } from '../../src/core/types/config.js';
-import { DatabaseError } from '../../src/core/utils/errors.js';
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -280,7 +279,7 @@ describe('SyncService persistence', () => {
     expect(rows.map((r) => r.folder_id).sort()).toEqual(['work:INBOX', 'work:Sent']);
   });
 
-  it('two distinct UIDs with same Message-ID in same folder are rejected by the legacy UNIQUE constraint', async () => {
+  it('two distinct UIDs with same Message-ID in same folder both persist', async () => {
     const database = getDatabase(getConfigStore().getConfig());
     await database.initialize();
     const service = new SyncService(database, factory);
@@ -290,16 +289,6 @@ describe('SyncService persistence', () => {
       total: 1,
       skipped: 0,
     } satisfies FolderSyncResult);
-    // Two messages with the same Message-ID, different UIDs in the
-    // same folder. The legacy `UNIQUE (account_id, folder_id, message_id)`
-    // constraint must reject the second one. `syncMessages` returns
-    // both; `upsertMessages` runs the inserts in a single transaction
-    // and the SQLite error is re-thrown as a `DatabaseError`. The
-    // `SyncService` does not currently catch this — the rejection
-    // surfaces to the caller, and the IMAP socket is still released
-    // by the `finally` block. The `App.requestSync()` wrapper maps
-    // any thrown error to a `'network'` outcome, so the user sees a
-    // graceful error either way.
     fake.syncMessages.mockResolvedValue({
       folder: 'INBOX',
       total: 2,
@@ -311,10 +300,17 @@ describe('SyncService persistence', () => {
       ],
     } satisfies MessageSyncResult);
 
-    await expect(service.syncAccountFolder(baseAccount, 'INBOX')).rejects.toBeInstanceOf(
-      DatabaseError
-    );
-    // IMAP was still disconnected.
+    const outcome = await service.syncAccountFolder(baseAccount, 'INBOX');
+    expect(outcome.kind).toBe('ok');
+
+    const rows = database.query('SELECT id, uid, message_id FROM emails ORDER BY uid').all() as {
+      id: string;
+      uid: number;
+      message_id: string;
+    }[];
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.uid)).toEqual([1, 2]);
+    expect(rows.every((r) => r.message_id === '<dup@example.com>')).toBe(true);
     expect(fake.disconnect).toHaveBeenCalledTimes(1);
   });
 

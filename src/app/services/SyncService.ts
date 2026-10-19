@@ -144,7 +144,9 @@ export class SyncService {
         return mapMessageError(error);
       }
       try {
-        this.repository.upsertMessages(toSafeAccountInput(account), target, result.messages);
+        this.repository.upsertMessages(toSafeAccountInput(account), target, result.messages, {
+          scannedThroughUid: result.scannedThroughUid,
+        });
       } catch (error) {
         this.recordSyncFailure(account, target, error);
         return mapMessageError(error);
@@ -260,7 +262,9 @@ export class SyncService {
         throw error;
       }
       try {
-        this.repository.upsertMessages(toSafeAccountInput(account), target, result.messages);
+        this.repository.upsertMessages(toSafeAccountInput(account), target, result.messages, {
+          scannedThroughUid: result.scannedThroughUid,
+        });
       } catch (error) {
         this.recordSyncFailure(account, target, error);
         throw error;

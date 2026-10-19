@@ -143,8 +143,15 @@ export interface MessageSyncResult {
   total: number;
   /** Messages that were successfully normalized. */
   parsed: number;
-  /** Messages dropped as duplicates by UID or Message-ID. */
+  /** Messages dropped as duplicate UID entries. */
   deduped: number;
+  /**
+   * Highest UID whose FETCH range completed successfully, including UIDs
+   * that returned no message because they were expunged. Omitted when no
+   * UID range was scanned or when the fetch failed. This is the upper
+   * bound for the checkpoint.
+   */
+  scannedThroughUid?: number;
   /** Deterministic, deduped, newest-first message list. */
   messages: SyncMessage[];
 }
