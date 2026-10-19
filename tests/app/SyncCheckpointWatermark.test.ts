@@ -289,7 +289,12 @@ describe('SyncService scanned-through checkpoint', () => {
 
     expect(outcome.kind).toBe('ok');
     expect(fake.fetchAll).not.toHaveBeenCalled();
-    expect(repo.getSyncState('work', inboxFolderId)).toBeNull();
+    // A successful empty sync still records the observed UIDVALIDITY
+    // generation (highest_uid 0) so the next sync can be incremental.
+    const state = repo.getSyncState('work', inboxFolderId);
+    expect(state?.highestUid).toBe(0);
+    expect(state?.uidValidity).toBe('1');
+    expect(state?.uidValidityObserved).toBe(true);
     expect(repo.listByFolder('work', inboxFolderId, 10)).toEqual([]);
   });
 

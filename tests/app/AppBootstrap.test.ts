@@ -162,6 +162,7 @@ describe('App.requestSync fresh-account bootstrap', () => {
         kind: 'ok',
         folders: [inbox, sent],
         messages: [makeEmail('personal:INBOX:1')],
+        replacedFolderIds: [],
       } satisfies SyncOutcome),
     };
     const { app, renderer } = await makeApp(fake);

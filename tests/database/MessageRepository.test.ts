@@ -131,6 +131,7 @@ function makeSyncResult(
     total: messages.length,
     parsed: messages.length,
     deduped: 0,
+    uidValidity: null,
     messages,
     ...over,
   };
@@ -176,9 +177,9 @@ describe('MessageRepository', () => {
   // -------------------------------------------------------------------------
 
   describe('migration', () => {
-    it('runs v1 through v5 on a fresh database', () => {
+    it('runs v1 through v6 on a fresh database', () => {
       const version = db.query('SELECT version FROM schema_version').get() as { version: number };
-      expect(version.version).toBe(5);
+      expect(version.version).toBe(6);
     });
 
     it('adds the new columns on emails', () => {
@@ -387,7 +388,7 @@ describe('MessageRepository', () => {
 
         // Migrations applied.
         const v = v1Db.query('SELECT version FROM schema_version').get() as { version: number };
-        expect(v.version).toBe(5);
+        expect(v.version).toBe(6);
 
         // Legacy row is still here, with uid = NULL.
         const legacy = v1Db
@@ -542,7 +543,7 @@ describe('MessageRepository', () => {
         await upgraded.initialize();
 
         const v = upgraded.query('SELECT version FROM schema_version').get() as { version: number };
-        expect(v.version).toBe(5);
+        expect(v.version).toBe(6);
         // Legacy '' is now NULL.
         const raw = upgraded
           .query('SELECT message_id FROM emails WHERE id = ?')
@@ -938,6 +939,51 @@ describe('MessageRepository', () => {
       expect(s!.highestUid).toBe(20);
     });
 
+    it('an explicit replacement overwrites the checkpoint and recorded generation', () => {
+      repo.upsertMessages(
+        baseAccount,
+        inboxFolder,
+        [makeMessage({ uid: 10 }), makeMessage({ uid: 20 })],
+        { uidValidity: '1' }
+      );
+      expect(repo.getSyncState(baseAccount.id, 'work:INBOX')!.highestUid).toBe(20);
+
+      const result = repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 5 })], {
+        uidValidity: '2',
+        replaceFolder: true,
+      });
+      expect(result.highestUid).toBe(5);
+      const rows = repo.listByFolder(baseAccount.id, 'work:INBOX', 10);
+      expect(rows.map((row) => row.uid)).toEqual([5]);
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.highestUid).toBe(5);
+      expect(state.uidValidity).toBe('2');
+      expect(state.uidValidityObserved).toBe(true);
+    });
+
+    it('an explicit replacement of an empty mailbox stores highest_uid = 0', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 10 })], {
+        uidValidity: '1',
+      });
+
+      repo.upsertMessages(baseAccount, inboxFolder, [], {
+        uidValidity: '2',
+        replaceFolder: true,
+      });
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.highestUid).toBe(0);
+      expect(state.uidValidity).toBe('2');
+      expect(state.uidValidityObserved).toBe(true);
+      expect(repo.listByFolder(baseAccount.id, 'work:INBOX', 10)).toEqual([]);
+    });
+
+    it('leaves the generation unobserved when uidValidity is not supplied', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 1 })]);
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.uidValidity).toBeNull();
+      expect(state.uidValidityObserved).toBe(false);
+    });
+
     it('a successful upsert resets status from error/partial to ok', () => {
       repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 1 })]);
       repo.markSyncError(baseAccount, inboxFolder, 'boom');
@@ -969,6 +1015,25 @@ describe('MessageRepository', () => {
       expect(after.highestUid).toBe(before);
       expect(after.lastSyncStatus).toBe('error');
       expect(after.lastError).toBe('db down');
+    });
+
+    it('markSyncPartial and markSyncError preserve the generation marker', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 10 })], {
+        uidValidity: '7',
+      });
+      expect(repo.getSyncState(baseAccount.id, 'work:INBOX')!.uidValidity).toBe('7');
+
+      repo.markSyncPartial(baseAccount, inboxFolder, 'partial failure');
+      let state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.uidValidity).toBe('7');
+      expect(state.uidValidityObserved).toBe(true);
+      expect(state.highestUid).toBe(10);
+
+      repo.markSyncError(baseAccount, inboxFolder, 'db down');
+      state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.uidValidity).toBe('7');
+      expect(state.uidValidityObserved).toBe(true);
+      expect(state.highestUid).toBe(10);
     });
 
     it('markSyncPartial/Error can be called before any successful upsert', () => {
@@ -1068,22 +1133,37 @@ describe('MessageRepository', () => {
   // -------------------------------------------------------------------------
 
   describe('buildImapSyncLimits', () => {
+    const state: FolderSyncState = {
+      accountId: 'work',
+      folderId: 'work:INBOX',
+      highestUid: 42,
+      lastSyncAt: 1,
+      lastSyncStatus: 'ok',
+      lastError: null,
+      uidValidity: '1',
+      uidValidityObserved: true,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+
     it('returns undefined when there is no sync state', () => {
       expect(buildImapSyncLimits(null)).toBeUndefined();
     });
 
     it('returns { sinceUid: highestUid } when there is state', () => {
-      const state: FolderSyncState = {
-        accountId: 'work',
-        folderId: 'work:INBOX',
-        highestUid: 42,
-        lastSyncAt: 1,
-        lastSyncStatus: 'ok',
-        lastError: null,
-        createdAt: 0,
-        updatedAt: 0,
-      };
       expect(buildImapSyncLimits(state)).toEqual({ sinceUid: 42 });
+    });
+
+    it('returns undefined for a legacy checkpoint whose generation was never observed', () => {
+      expect(
+        buildImapSyncLimits({ ...state, uidValidity: null, uidValidityObserved: false })
+      ).toBeUndefined();
+    });
+
+    it('uses the checkpoint when the generation was observed as unavailable', () => {
+      expect(
+        buildImapSyncLimits({ ...state, uidValidity: null, uidValidityObserved: true })
+      ).toEqual({ sinceUid: 42 });
     });
   });
 

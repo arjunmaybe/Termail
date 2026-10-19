@@ -37,6 +37,7 @@ import {
   dedupeMessages,
   extractBodyAsync,
   normalizeFetchedMessage,
+  normalizeUidValidity,
   planBatches,
   resolveLimits,
   sortNewestFirst,
@@ -287,10 +288,27 @@ export class ImapService {
     }
 
     try {
+      // The generation check must happen immediately after the mailbox is
+      // selected and before any FETCH that uses the old checkpoint: a
+      // UIDVALIDITY change invalidates every UID in the stored state.
+      const observedUidValidity = normalizeUidValidity(mailbox.uidValidity);
+      const uidValidityChanged =
+        options.expectedUidValidity !== undefined &&
+        options.expectedUidValidity !== observedUidValidity;
+      const effectiveSinceUid = uidValidityChanged ? undefined : limits.sinceUid;
+      if (uidValidityChanged) {
+        logger.warn('IMAP UIDVALIDITY changed; rescanning folder from the start', {
+          accountId,
+          folder: folderPath,
+          expectedUidValidity: options.expectedUidValidity,
+          observedUidValidity,
+        });
+      }
+
       const upperUid = Number(mailbox.uidNext) - 1;
       const batches = planBatches({
         upperUid,
-        sinceUid: limits.sinceUid ?? 0,
+        sinceUid: effectiveSinceUid ?? 0,
         batchSize: limits.batchSize,
         maxMessages: limits.maxMessages,
       });
@@ -338,6 +356,8 @@ export class ImapService {
         parsed: messages.length,
         deduped: deduped.deduped,
         ...(scannedThroughUid !== undefined ? { scannedThroughUid } : {}),
+        uidValidity: observedUidValidity,
+        ...(uidValidityChanged ? { uidValidityChanged: true } : {}),
         messages,
       };
     } finally {

@@ -240,6 +240,7 @@ describe('B5 App.requestSync single-flight + stale guard', () => {
           makePersistedFolder({ id: 'work:Sent', name: 'Sent', fullName: 'Sent', type: 'sent' }),
         ],
         messages: [inboxEmail],
+        replacedFolderIds: [],
       });
       await first;
 
@@ -270,6 +271,7 @@ describe('B5 App.requestSync single-flight + stale guard', () => {
         makePersistedFolder({ id: 'work:Sent', name: 'Sent', fullName: 'Sent', type: 'sent' }),
       ],
       messages: [],
+      replacedFolderIds: [],
     });
     const { app, renderer } = await makeApp(fake);
     try {

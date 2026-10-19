@@ -23,6 +23,7 @@ import {
   normalizeDate,
   normalizeFetchedMessage,
   normalizeMessageId,
+  normalizeUidValidity,
   parseEnvelopeAddresses,
   planBatches,
   resolveLimits,
@@ -113,6 +114,40 @@ describe('normalizeMessageId', () => {
 
   it('leaves an unbracketed id unchanged', () => {
     expect(normalizeMessageId('abc@example.com')).toBe('abc@example.com');
+  });
+});
+
+describe('normalizeUidValidity', () => {
+  it('converts positive bigint values to exact decimal strings', () => {
+    expect(normalizeUidValidity(1n)).toBe('1');
+    expect(normalizeUidValidity(18446744073709551615n)).toBe('18446744073709551615');
+  });
+
+  it('accepts positive safe integer numbers and digit strings', () => {
+    expect(normalizeUidValidity(42)).toBe('42');
+    expect(normalizeUidValidity('00042')).toBe('42');
+  });
+
+  it('treats zero, negative, and non-integer values as unavailable', () => {
+    expect(normalizeUidValidity(0n)).toBeNull();
+    expect(normalizeUidValidity(-1n)).toBeNull();
+    expect(normalizeUidValidity(0)).toBeNull();
+    expect(normalizeUidValidity(-1)).toBeNull();
+    expect(normalizeUidValidity(1.5)).toBeNull();
+    expect(normalizeUidValidity(Number.NaN)).toBeNull();
+    expect(normalizeUidValidity('0')).toBeNull();
+    expect(normalizeUidValidity('-1')).toBeNull();
+  });
+
+  it('treats absent, invalid, and unsupported runtime values as unavailable', () => {
+    expect(normalizeUidValidity(undefined)).toBeNull();
+    expect(normalizeUidValidity(null)).toBeNull();
+    expect(normalizeUidValidity('')).toBeNull();
+    expect(normalizeUidValidity('abc')).toBeNull();
+    expect(normalizeUidValidity('1.5')).toBeNull();
+    expect(normalizeUidValidity({})).toBeNull();
+    expect(normalizeUidValidity([])).toBeNull();
+    expect(normalizeUidValidity(true)).toBeNull();
   });
 });
 
@@ -601,6 +636,7 @@ describe('ImapService.syncMessages', () => {
     expect(result.total).toBe(0);
     expect(result.parsed).toBe(0);
     expect(result.deduped).toBe(0);
+    expect(result.uidValidity).toBe('1');
   });
 
   it('fetches messages in batches and normalizes them', async () => {
@@ -769,5 +805,133 @@ describe('ImapService.syncMessages', () => {
     const result = await service.syncMessages('INBOX');
     expect(result.messages).toEqual([]);
     expect(fake.mailboxClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports the normalized UIDVALIDITY generation without a change marker', async () => {
+    fake.mailboxOpen.mockResolvedValueOnce({
+      path: 'INBOX',
+      delimiter: '/',
+      flags: new Set<string>(),
+      uidNext: 1,
+      uidValidity: 7n,
+      exists: 0,
+    });
+    const result = await service.syncMessages('INBOX');
+    expect(result.uidValidity).toBe('7');
+    expect(result.uidValidityChanged).toBeUndefined();
+  });
+
+  it('ignores sinceUid and rescans from the start when the generation changed', async () => {
+    fake.mailboxOpen.mockResolvedValueOnce({
+      path: 'INBOX',
+      delimiter: '/',
+      flags: new Set<string>(),
+      uidNext: 4,
+      uidValidity: 2n,
+      exists: 3,
+    });
+    fake.fetchAll.mockResolvedValueOnce([
+      makeRawFetchedMessage(1, 'a'),
+      makeRawFetchedMessage(2, 'b'),
+      makeRawFetchedMessage(3, 'c'),
+    ]);
+    const result = await service.syncMessages('INBOX', {
+      limits: { sinceUid: 2 },
+      expectedUidValidity: '1',
+    });
+    expect(fake.fetchAll).toHaveBeenCalledTimes(1);
+    expect(fake.fetchAll.mock.calls[0]?.[0]).toBe('1:3');
+    expect(result.uidValidity).toBe('2');
+    expect(result.uidValidityChanged).toBe(true);
+    expect(result.messages.map((m) => m.uid)).toEqual([3, 2, 1]);
+  });
+
+  it('keeps the incremental checkpoint when the generation matches', async () => {
+    fake.mailboxOpen.mockResolvedValueOnce({
+      path: 'INBOX',
+      delimiter: '/',
+      flags: new Set<string>(),
+      uidNext: 4,
+      uidValidity: 2n,
+      exists: 3,
+    });
+    fake.fetchAll.mockResolvedValueOnce([makeRawFetchedMessage(3, 'c')]);
+    const result = await service.syncMessages('INBOX', {
+      limits: { sinceUid: 2 },
+      expectedUidValidity: '2',
+    });
+    expect(fake.fetchAll.mock.calls[0]?.[0]).toBe('3:3');
+    expect(result.uidValidityChanged).toBeUndefined();
+  });
+
+  it('performs no generation comparison when expectedUidValidity is omitted', async () => {
+    fake.mailboxOpen.mockResolvedValueOnce({
+      path: 'INBOX',
+      delimiter: '/',
+      flags: new Set<string>(),
+      uidNext: 4,
+      uidValidity: 9n,
+      exists: 3,
+    });
+    fake.fetchAll.mockResolvedValueOnce([makeRawFetchedMessage(3, 'c')]);
+    const result = await service.syncMessages('INBOX', { limits: { sinceUid: 2 } });
+    expect(fake.fetchAll.mock.calls[0]?.[0]).toBe('3:3');
+    expect(result.uidValidity).toBe('9');
+    expect(result.uidValidityChanged).toBeUndefined();
+  });
+
+  it('treats an observed null as matching a previous null observation', async () => {
+    fake.mailboxOpen.mockResolvedValueOnce({
+      path: 'INBOX',
+      delimiter: '/',
+      flags: new Set<string>(),
+      uidNext: 4,
+      uidValidity: undefined,
+      exists: 3,
+    });
+    fake.fetchAll.mockResolvedValueOnce([makeRawFetchedMessage(3, 'c')]);
+    const result = await service.syncMessages('INBOX', {
+      limits: { sinceUid: 2 },
+      expectedUidValidity: null,
+    });
+    expect(fake.fetchAll.mock.calls[0]?.[0]).toBe('3:3');
+    expect(result.uidValidity).toBeNull();
+    expect(result.uidValidityChanged).toBeUndefined();
+  });
+
+  it('treats valid → unavailable and unavailable → valid as generation changes', async () => {
+    fake.mailboxOpen.mockResolvedValueOnce({
+      path: 'INBOX',
+      delimiter: '/',
+      flags: new Set<string>(),
+      uidNext: 4,
+      uidValidity: undefined,
+      exists: 3,
+    });
+    fake.fetchAll.mockResolvedValueOnce([]);
+    const becameUnavailable = await service.syncMessages('INBOX', {
+      limits: { sinceUid: 2 },
+      expectedUidValidity: '5',
+    });
+    expect(fake.fetchAll.mock.calls[0]?.[0]).toBe('1:3');
+    expect(becameUnavailable.uidValidity).toBeNull();
+    expect(becameUnavailable.uidValidityChanged).toBe(true);
+
+    fake.mailboxOpen.mockResolvedValueOnce({
+      path: 'INBOX',
+      delimiter: '/',
+      flags: new Set<string>(),
+      uidNext: 4,
+      uidValidity: 5n,
+      exists: 3,
+    });
+    fake.fetchAll.mockResolvedValueOnce([]);
+    const becameAvailable = await service.syncMessages('INBOX', {
+      limits: { sinceUid: 2 },
+      expectedUidValidity: null,
+    });
+    expect(fake.fetchAll.mock.calls[1]?.[0]).toBe('1:3');
+    expect(becameAvailable.uidValidity).toBe('5');
+    expect(becameAvailable.uidValidityChanged).toBe(true);
   });
 });

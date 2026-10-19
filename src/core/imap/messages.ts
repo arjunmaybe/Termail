@@ -76,6 +76,38 @@ export function buildFetchRange(sinceUid?: number): string {
   return '1:*';
 }
 
+/**
+ * Normalize an IMAP UIDVALIDITY value from `imapflow` into the exact
+ * decimal string used as the persisted generation marker.
+ *
+ * The installed `imapflow` types `MailboxObject.uidValidity` as `bigint`,
+ * but the runtime value is only guaranteed when the server sent a usable
+ * `[UIDVALIDITY n]`. This normalizer is deliberately defensive:
+ *
+ *   - `bigint`: accepted when strictly positive; converted with `.toString()`
+ *     so the exact value never passes through JavaScript `Number`.
+ *   - `number`: accepted only when a positive safe integer.
+ *   - `string`: accepted only when a positive run of ASCII digits; leading
+ *     zeros are stripped without numeric conversion.
+ *   - Anything else (absent, `null`, `undefined`, `NaN`, zero, negative,
+ *     non-numeric, objects) is treated as unavailable and returns `null`.
+ */
+export function normalizeUidValidity(value: unknown): string | null {
+  if (typeof value === 'bigint') {
+    return value > 0n ? value.toString() : null;
+  }
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? String(value) : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) return null;
+    const significant = trimmed.replace(/^0+/, '');
+    return significant.length > 0 ? significant : null;
+  }
+  return null;
+}
+
 /** Split a range string of the form `A:*` into UID batches of size N. */
 export function planBatches(opts: {
   upperUid: number;

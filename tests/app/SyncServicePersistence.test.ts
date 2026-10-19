@@ -156,6 +156,7 @@ describe('SyncService persistence', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage({ uid: 1 })],
     } satisfies MessageSyncResult);
 
@@ -185,6 +186,7 @@ describe('SyncService persistence', () => {
         total: 1,
         parsed: 1,
         deduped: 0,
+        uidValidity: null,
         messages: [makeMessage({ uid: 1, isRead: false })],
       } satisfies MessageSyncResult)
       .mockResolvedValueOnce({
@@ -192,6 +194,7 @@ describe('SyncService persistence', () => {
         total: 1,
         parsed: 1,
         deduped: 0,
+        uidValidity: null,
         messages: [makeMessage({ uid: 1, isRead: true })],
       } satisfies MessageSyncResult);
 
@@ -222,6 +225,7 @@ describe('SyncService persistence', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage({ uid: 7, subject: 'persisted-1' })],
     } satisfies MessageSyncResult);
     const service1 = new SyncService(database, factory1);
@@ -258,6 +262,7 @@ describe('SyncService persistence', () => {
         total: 1,
         parsed: 1,
         deduped: 0,
+        uidValidity: null,
         messages: [makeMessage({ uid: 1, messageId: '<same@example.com>', folder: 'INBOX' })],
       } satisfies MessageSyncResult)
       .mockResolvedValueOnce({
@@ -265,6 +270,7 @@ describe('SyncService persistence', () => {
         total: 1,
         parsed: 1,
         deduped: 0,
+        uidValidity: null,
         messages: [makeMessage({ uid: 1, messageId: '<same@example.com>', folder: 'Sent' })],
       } satisfies MessageSyncResult);
 
@@ -294,6 +300,7 @@ describe('SyncService persistence', () => {
       total: 2,
       parsed: 2,
       deduped: 0,
+      uidValidity: null,
       messages: [
         makeMessage({ uid: 1, messageId: '<dup@example.com>' }),
         makeMessage({ uid: 2, messageId: '<dup@example.com>' }),
@@ -329,6 +336,7 @@ describe('SyncService persistence', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage({ uid: 1 })],
     } satisfies MessageSyncResult);
 

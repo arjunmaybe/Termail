@@ -9,6 +9,7 @@ import { MIGRATION_V2_UP_SQL } from './migrations/v2.sql.js';
 import { MIGRATION_V3_UP_SQL } from './migrations/v3.sql.js';
 import { MIGRATION_V4_UP_SQL } from './migrations/v4.sql.js';
 import { MIGRATION_V5_UP_SQL } from './migrations/v5.sql.js';
+import { MIGRATION_V6_UP_SQL } from './migrations/v6.sql.js';
 import { CREATE_TABLES_SQL, SCHEMA_VERSION } from './schema.js';
 
 export interface Migration {
@@ -88,6 +89,16 @@ const migrations: Migration[] = [
     // v5 is forward-only like v3/v4: reverting would require another
     // full emails-table rebuild and could not restore Message-ID
     // uniqueness once duplicate Message-IDs have been persisted.
+  },
+  {
+    version: 6,
+    description: 'Track per-folder IMAP UIDVALIDITY generation',
+    up: (db: Database) => {
+      db.exec(MIGRATION_V6_UP_SQL);
+    },
+    // v6 is forward-only like v3/v4/v5: SQLite cannot drop a column on a
+    // table referenced by FTS triggers, and reverting would discard the
+    // recorded generation. Start from a fresh database to go back.
   },
 ];
 

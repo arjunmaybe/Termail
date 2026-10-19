@@ -439,6 +439,11 @@ export class App extends BoxRenderable {
           const messages: PersistedEmail[] = outcome.messages;
           actions.setEmails(messages);
         }
+        if (outcome.replacedFolderIds.length > 0) {
+          // The previous UID generation's rows were deleted from the DB;
+          // in-memory search hits may still reference them.
+          actions.clearSearch();
+        }
         actions.setSyncStatus('success');
         break;
       }
@@ -514,6 +519,11 @@ export class App extends BoxRenderable {
           const folders: Folder[] = outcome.folders.map(toFolderProjection);
           actions.setFolders(folders);
           actions.setEmails(outcome.messages);
+        }
+        if (outcome.replacedFolderIds.length > 0) {
+          // The previous UID generation's rows were deleted from the DB;
+          // in-memory search hits may still reference them.
+          actions.clearSearch();
         }
         actions.setSyncStatus('success');
         break;

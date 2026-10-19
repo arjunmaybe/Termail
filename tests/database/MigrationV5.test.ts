@@ -211,7 +211,8 @@ describe('v5 migration', () => {
     await db.initialize();
 
     const version = db.query('SELECT version FROM schema_version').get() as { version: number };
-    expect(version.version).toBe(5);
+    // v5 is still applied, then the forward-only v6 generation columns.
+    expect(version.version).toBe(6);
 
     expect(db.query('PRAGMA integrity_check').all()).toEqual([{ integrity_check: 'ok' }]);
     expect(db.query('PRAGMA foreign_key_check').all()).toEqual([]);

@@ -156,6 +156,7 @@ describe('App.requestSync', () => {
         },
       ],
       messages: [],
+      replacedFolderIds: [],
     };
     fake.syncAccountFolder.mockResolvedValueOnce(okOutcome);
 
@@ -171,6 +172,59 @@ describe('App.requestSync', () => {
       expect(selectors.syncStatus).toBe('success');
       expect(selectors.syncError).toBeNull();
       expect(selectors.emails).toEqual([]);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('clears stale search hits after a successful folder-cache replacement', async () => {
+    const fake = makeFakeSyncService();
+    const okOutcome: SyncOutcome = {
+      kind: 'ok',
+      folders: [],
+      messages: [],
+      replacedFolderIds: ['work:INBOX'],
+    };
+    fake.syncAccountFolder.mockResolvedValueOnce(okOutcome);
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('old generation');
+      actions.setSearchHits([]);
+      expect(selectors.searchHits).not.toBeNull();
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('success');
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('preserves search hits when no folder cache was replaced', async () => {
+    const fake = makeFakeSyncService();
+    const okOutcome: SyncOutcome = {
+      kind: 'ok',
+      folders: [],
+      messages: [],
+      replacedFolderIds: [],
+    };
+    fake.syncAccountFolder.mockResolvedValueOnce(okOutcome);
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('still current');
+      actions.setSearchHits([]);
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('success');
+      expect(selectors.searchHits).toEqual([]);
+      expect(selectors.searchActive).toBe(true);
     } finally {
       renderer.stop();
       renderer.destroy();

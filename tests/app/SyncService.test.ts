@@ -164,6 +164,7 @@ describe('SyncService', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage({ uid: 1, subject: 'Hello' })],
     };
     fake.syncFolders.mockResolvedValueOnce(folderResult);
@@ -199,6 +200,7 @@ describe('SyncService', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage({ uid: 9, subject: 'persisted' })],
     };
     fake.syncFolders.mockResolvedValueOnce(folderResult);
@@ -297,6 +299,7 @@ describe('SyncService', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage({ uid: 5 })],
     } satisfies MessageSyncResult);
     const first = await service.syncAccountFolder(baseAccount, 'INBOX');
@@ -330,6 +333,7 @@ describe('SyncService', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage({ uid: 6 })],
     } satisfies MessageSyncResult);
     const recovered = await service.syncAccountFolder(baseAccount, 'INBOX');
@@ -369,6 +373,7 @@ describe('SyncService', () => {
       total: 0,
       parsed: 0,
       deduped: 0,
+      uidValidity: null,
       messages: [],
     };
     fake.syncFolders.mockResolvedValueOnce(folderResult);

@@ -29,9 +29,15 @@
  * `(account_id, folder_id, uid)`; Message-ID is lookup data, not a
  * mailbox identity. Existing rows, ids, rowids, values, indexes, FTS5,
  * and triggers are preserved.
+ *
+ * v6 lives in `migrations/v6.sql.ts`. v6 is additive: it adds
+ * `uid_validity` (TEXT) and `uid_validity_observed` (INTEGER) to
+ * `folder_sync_state` so a folder's IMAP UID generation can be
+ * detected and a stale generation retired. It does not rebuild
+ * `emails` or alter any email row.
  */
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const CREATE_TABLES_V1_SQL = `
 -- Accounts table

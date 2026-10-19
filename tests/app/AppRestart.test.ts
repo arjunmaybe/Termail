@@ -204,6 +204,7 @@ describe('App restart', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage({ uid: 1 })],
     } satisfies MessageSyncResult);
 
