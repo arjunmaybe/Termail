@@ -12,14 +12,14 @@ over SMTP, and provides keyboard-first navigation and FTS5 search.
 - Full-text search (FTS5) with structured operators (`from:`, `subject:`, `is:`, dates)
 - SMTP sending over implicit TLS / STARTTLS (password auth, no external SMTP library)
 - Keyboard-first TUI (`j/k` mail, `h/l` folders, `/` search, `r` sync, `q` quit)
+- Full-screen composer (`c`): To/Cc/Bcc/Subject/body with native editing,
+  Tab/Enter field navigation, and `Ctrl+Enter` send
 - Optional AI summarization and reply drafting via OpenRouter (off by default, never auto-sends)
 - JSON config with Zod validation; strict TypeScript; Biome lint/format
 
 ## Limitations
 
-- Compose is service-level (`ComposeController` + `SmtpService`): sending works
-  programmatically and via AI-drafted replies routed into compose for review.
-  There is no full-screen compose editor; external-editor composition is planned.
+- External-editor composition is not available.
 - `bun run build` succeeds locally on Windows and in Ubuntu CI. If a build
   fails in another environment, `bun run dev`, `bun run test:sequential`,
   and `bun run typecheck` remain the canonical checks.
@@ -168,10 +168,15 @@ account; `smtpPort`/`smtpMode` default to implicit-tls/465.
 | `q` | Quit |
 | `/` | Search (`Esc` cancels, `Enter` submits) |
 | `r` | Sync current folder |
+| `c` | Compose a new message (full-screen composer) |
 | `s` | AI summary |
 | `d` | AI draft reply (into compose, never auto-sends) |
 
-
+In the composer, `Tab` / `Shift+Tab` cycle To → Cc → Bcc → Subject → Body →
+Send, `Enter` moves to the next field (in the body it inserts a newline), and
+`Ctrl+Enter` sends — or `Enter` / `Space` on the focused Send target. `Esc` /
+`Ctrl+C` discards: an empty composer closes immediately, otherwise `y` discards
+and `n` / `Esc` keeps editing.
 
 ## Security notes
 
