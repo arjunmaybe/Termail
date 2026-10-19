@@ -40,3 +40,29 @@ jobs:
 
       - name: Test
         run: bun run test:sequential
+
+  windows-vault:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        # Pinned to actions/checkout v7 (verified upstream tag SHA).
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Bun
+        # Pinned to oven-sh/setup-bun v2 (verified upstream tag SHA).
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          # Pinned to the version in packageManager for reproducible CI.
+          bun-version: 1.4.1
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Windows Credential Manager integration tests
+        # Runs on a disposable GitHub-hosted runner; the integration test
+        # writes and removes uniquely-named dummy entries only.
+        run: bun test --parallel=1 tests/secretstore/
+        env:
+          TERMAIL_TEST_WINDOWS_VAULT: '1'
