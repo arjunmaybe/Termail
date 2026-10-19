@@ -31,10 +31,22 @@ sends, OpenRouter (optional, off by default) assists.
   `SearchRepository` (FTS5 + structured search). Migrations in
   `migrations.ts` + `migrations/v*.sql.ts`, currently at version 4.
 - `src/core/ai/` — `AiService` plus `OpenRouterTransport` (fetch with
-  timeout covering the full response body, injectable for tests).
+  timeout covering the full response body, injectable for tests). The
+  provider key comes from the `TERMAIL_AI_API_KEY` environment variable
+  at request time.
 - `src/core/config/` — JSON config at `~/.config/termail/config.json`
-  with Zod validation. Secrets never live here; they come from
-  `TERMAIL_<ACCOUNT_ID>_PASSWORD` / `TERMAIL_<ACCOUNT_ID>_OAUTH_TOKEN`.
+  with Zod validation. Secrets never live here. Account credentials
+  resolve in order: the account environment variable (only a non-empty
+  value counts), then the configured OS credential store, then an
+  `AuthenticationError` naming the account and the setup action. The
+  variable is `TERMAIL_<ACCOUNT_ID>_PASSWORD` for password auth or
+  `TERMAIL_<ACCOUNT_ID>_OAUTH_TOKEN` for OAuth2, with the account id
+  uppercased and runs of non-alphanumeric characters collapsed to `_`
+  (`work-mail` → `TERMAIL_WORK_MAIL_PASSWORD`).
+- `src/core/secretstore/` — OS credential store. `SecretStore` interface
+  plus the Windows `PasswordVault` backend (PowerShell, no new
+  dependencies) and a one-time interactive setup flow; other platforms
+  resolve to `null`, keeping environment-only behavior.
 
 ## Sync invariant
 
@@ -44,7 +56,9 @@ missing Message-IDs and never part of the sync identity.
 Successful sync:
 
 - fetch new UIDs (`sinceUid` exclusive, from the stored checkpoint)
-- persist messages and folders in one transaction
+- persist the message batch and advance that folder's checkpoint in one
+  transaction (account and folder rows are ensured beforehand,
+  idempotently)
 - advance the checkpoint (`highest_uid` is `MAX`-monotonic, never regresses)
 
 Failed sync:
