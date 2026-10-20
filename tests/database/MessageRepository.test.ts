@@ -1135,7 +1135,11 @@ describe('MessageRepository', () => {
       expect(after.lastSyncStatus).toBe('partial');
     });
 
-    it('partial result persists messages and advances to the max persisted UID', () => {
+    // These tests document current helper behavior, not a safe general
+    // contract. A sparse partial result such as UIDs [10, 30] with UID 20
+    // missing could advance the checkpoint past an unpersisted message.
+    // There is currently no production caller of persistSyncResult.
+    it('partial result currently persists supplied messages and advances to their maximum UID', () => {
       const r = persistSyncResult(
         repo,
         baseAccount,
@@ -1157,7 +1161,7 @@ describe('MessageRepository', () => {
       expect(uids).toEqual([1, 2, 3]);
     });
 
-    it('error result persists messages and advances to the max persisted UID', () => {
+    it('error result currently persists supplied messages and advances to their maximum UID', () => {
       const r = persistSyncResult(
         repo,
         baseAccount,
