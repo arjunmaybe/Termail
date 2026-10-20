@@ -188,10 +188,13 @@ and `n` / `Esc` keeps editing.
   headers and up to `maxBodyChars` body characters (default 8000) to the
   configured OpenRouter endpoint, only when explicitly invoked. Output is
   display text / drafts for review, never auto-sent.
-* The local SQLite database is **not encrypted by Termail**. POSIX systems
-  get owner-only data directories/files; Windows ignores POSIX mode bits
-  and performs no ACL hardening — configure filesystem ACLs externally if
-  multiple users share the machine. See `SECURITY.md` for reporting.
+* The local SQLite database is **not encrypted by Termail**. POSIX owner-only
+  modes do not secure files on Windows: Termail neither sets nor verifies
+  Windows ACLs. Default-path protection relies on ACLs inherited from the
+  user profile; custom or relative `database.path` values may have different
+  exposure. SQLite `-wal` and `-shm` sidecars are also sensitive. See
+  [`SECURITY.md`](SECURITY.md) for details and a read-only ACL inspection
+  command.
 
 ## Screenshots
 
