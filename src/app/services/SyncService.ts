@@ -25,11 +25,13 @@ import type { PersistedEmail, PersistedFolder } from '../../core/database/index.
 import {
   buildImapSyncLimits,
   deriveFolderId,
+  type FolderSyncState,
   MessageRepository,
 } from '../../core/database/MessageRepository.js';
 import type { SyncFolder } from '../../core/imap/folders.js';
 import type { ImapService } from '../../core/imap/ImapService.js';
 import { getImapService, resetImapService } from '../../core/imap/ImapService.js';
+import type { MessageSyncOptions, MessageSyncResult } from '../../core/imap/types.js';
 import type { AccountConfig } from '../../core/types/config.js';
 import { AuthenticationError, getErrorMessage, NetworkError } from '../../core/utils/errors.js';
 import { logger } from '../../core/utils/logger.js';
@@ -50,22 +52,42 @@ export type SyncOutcome =
       kind: 'ok';
       folders: PersistedFolder[];
       messages: PersistedEmail[];
+      /**
+       * DB ids of folders whose cached messages were replaced because their
+       * IMAP UIDVALIDITY generation changed (or a legacy unverified
+       * checkpoint was retired). The TUI uses this to drop stale in-memory
+       * search results for the discarded generation. Only populated after a
+       * successful persistence.
+       */
+      replacedFolderIds: string[];
     }
   | {
       kind: 'auth';
       message: string;
+      /**
+       * Present only when a replacement committed before a later failure
+       * (e.g. a post-persistence read). The TUI must still clear stale
+       * search hits for these folders.
+       */
+      replacedFolderIds?: string[];
     }
   | {
       kind: 'network';
       message: string;
+      /** See the `auth` variant. */
+      replacedFolderIds?: string[];
     }
   | {
       kind: 'no-account';
       message: string;
+      /** See the `auth` variant. */
+      replacedFolderIds?: string[];
     }
   | {
       kind: 'no-folder';
       message: string;
+      /** See the `auth` variant. */
+      replacedFolderIds?: string[];
     };
 
 /**
@@ -133,35 +155,62 @@ export class SyncService {
         return { kind: 'no-folder', message: 'No selectable folders on server' };
       }
 
+      const folderId = deriveFolderId(account.id, target.path);
+      const checkpoint = this.repository.getSyncState(account.id, folderId);
       let result: Awaited<ReturnType<typeof imap.syncMessages>>;
+      let replaced = false;
       try {
-        const folderId = deriveFolderId(account.id, target.path);
-        const checkpoint = this.repository.getSyncState(account.id, folderId);
         const limits = buildImapSyncLimits(checkpoint);
-        result = await imap.syncMessages(target.path, limits ? { limits } : {});
+        result = await imap.syncMessages(target.path, buildSyncOptions(checkpoint, limits));
+        replaced = shouldReplaceFolder(checkpoint, result);
       } catch (error) {
         this.recordSyncFailure(account, target, error);
         return mapMessageError(error);
       }
       try {
-        this.repository.upsertMessages(toSafeAccountInput(account), target, result.messages);
+        this.repository.upsertMessages(toSafeAccountInput(account), target, result.messages, {
+          scannedThroughUid: result.scannedThroughUid,
+          uidValidity: result.uidValidity,
+          replaceFolder: replaced,
+        });
       } catch (error) {
         this.recordSyncFailure(account, target, error);
         return mapMessageError(error);
       }
 
-      const persistedFolders = this.repository.listFoldersForAccount(account.id);
-      const targetId = persistedFolders.find((f) => f.fullName === target.path)?.id ?? null;
-      const messages = targetId ? this.repository.listByFolder(account.id, targetId, 500) : [];
+      // The replacement (if any) is committed at this point. Preserve its
+      // invalidation signal even if the post-sync reads below fail.
+      const replacedFolderIds = replaced ? [folderId] : [];
 
-      logger.info('Sync completed', {
-        accountId: account.id,
-        folder: target.path,
-        folders: persistedFolders.length,
-        messages: messages.length,
-      });
+      try {
+        const persistedFolders = this.repository.listFoldersForAccount(account.id);
+        const messages = this.repository.listByFolder(account.id, folderId, 500);
 
-      return { kind: 'ok', folders: persistedFolders, messages };
+        logger.info('Sync completed', {
+          accountId: account.id,
+          folder: target.path,
+          folders: persistedFolders.length,
+          messages: messages.length,
+          replaced,
+        });
+
+        return {
+          kind: 'ok',
+          folders: persistedFolders,
+          messages,
+          replacedFolderIds,
+        };
+      } catch (error) {
+        logger.warn('Sync persisted but post-sync reads failed', {
+          accountId: account.id,
+          folder: target.path,
+          error: getErrorMessage(error),
+        });
+        return {
+          ...mapMessageError(error),
+          ...(replaced ? { replacedFolderIds } : {}),
+        };
+      }
     } finally {
       try {
         await imap.disconnect();
@@ -249,39 +298,66 @@ export class SyncService {
       // means a full sync. `MAX()` in the repository guarantees the
       // checkpoint never regresses, so a stale or empty batch cannot move
       // it backwards.
+      const folderId = deriveFolderId(account.id, target.path);
+      const checkpoint = this.repository.getSyncState(account.id, folderId);
       let result: Awaited<ReturnType<typeof imap.syncMessages>>;
+      let replaced = false;
       try {
-        const folderId = deriveFolderId(account.id, target.path);
-        const checkpoint = this.repository.getSyncState(account.id, folderId);
         const limits = buildImapSyncLimits(checkpoint);
-        result = await imap.syncMessages(imapFolderPath, limits ? { limits } : {});
+        result = await imap.syncMessages(imapFolderPath, buildSyncOptions(checkpoint, limits));
+        replaced = shouldReplaceFolder(checkpoint, result);
       } catch (error) {
         this.recordSyncFailure(account, target, error);
         throw error;
       }
       try {
-        this.repository.upsertMessages(toSafeAccountInput(account), target, result.messages);
+        this.repository.upsertMessages(toSafeAccountInput(account), target, result.messages, {
+          scannedThroughUid: result.scannedThroughUid,
+          uidValidity: result.uidValidity,
+          replaceFolder: replaced,
+        });
       } catch (error) {
         this.recordSyncFailure(account, target, error);
         throw error;
       }
+
+      // The replacement (if any) is committed at this point. Preserve its
+      // invalidation signal even if the post-sync reads below fail.
+      const replacedFolderIds = replaced ? [folderId] : [];
 
       // Build the post-sync folder list straight from the DB so the
       // caller sees exactly what `MessageRepository.listFoldersForAccount`
       // would return, including any folders the server didn't list this
       // time but were already persisted from prior runs.
-      const persistedFolders = this.repository.listFoldersForAccount(account.id);
-      const targetId = persistedFolders.find((f) => f.fullName === imapFolderPath)?.id ?? null;
-      const messages = targetId ? this.repository.listByFolder(account.id, targetId, 500) : [];
+      try {
+        const persistedFolders = this.repository.listFoldersForAccount(account.id);
+        const messages = this.repository.listByFolder(account.id, folderId, 500);
 
-      logger.info('Sync completed', {
-        accountId: account.id,
-        folder: imapFolderPath,
-        folders: persistedFolders.length,
-        messages: messages.length,
-      });
+        logger.info('Sync completed', {
+          accountId: account.id,
+          folder: imapFolderPath,
+          folders: persistedFolders.length,
+          messages: messages.length,
+          replaced,
+        });
 
-      return { kind: 'ok', folders: persistedFolders, messages };
+        return {
+          kind: 'ok',
+          folders: persistedFolders,
+          messages,
+          replacedFolderIds,
+        };
+      } catch (error) {
+        logger.warn('Sync persisted but post-sync reads failed', {
+          accountId: account.id,
+          folder: imapFolderPath,
+          error: getErrorMessage(error),
+        });
+        return {
+          ...mapMessageError(error),
+          ...(replaced ? { replacedFolderIds } : {}),
+        };
+      }
     } finally {
       try {
         await imap.disconnect();
@@ -351,6 +427,45 @@ function mapConnectError(error: unknown): SyncOutcome {
   }
   // Anything else (unmapped IMAP error, etc.) is a network-level failure.
   return { kind: 'network', message: getErrorMessage(error) };
+}
+
+/**
+ * Build the `MessageSyncOptions` for a folder from its persisted state.
+ *
+ * `expectedUidValidity` is passed only when a previous successful sync
+ * observed the generation:
+ *   - omitted: no previous observation (first sync or unverified legacy
+ *     checkpoint); the IMAP layer performs no comparison.
+ *   - `null`: a previous sync observed that the server reported no usable
+ *     UIDVALIDITY.
+ *   - string: the exact generation the caller expects.
+ */
+function buildSyncOptions(
+  checkpoint: FolderSyncState | null,
+  limits: ReturnType<typeof buildImapSyncLimits>
+): MessageSyncOptions {
+  return {
+    ...(limits ? { limits } : {}),
+    ...(checkpoint?.uidValidityObserved ? { expectedUidValidity: checkpoint.uidValidity } : {}),
+  };
+}
+
+/**
+ * Decide whether the folder cache must be atomically replaced.
+ *
+ * - A generation change detected by the IMAP layer always replaces.
+ * - A legacy/pre-v6 state row (`uidValidityObserved === false`) is
+ *   unverified, so its cached rows are retired on the first successful
+ *   full scan even if the observed value happens to match nothing.
+ * - A brand-new folder (no state) has no prior cache to retire, so it is
+ *   not replaced; its first sync simply records the observation.
+ */
+function shouldReplaceFolder(
+  checkpoint: FolderSyncState | null,
+  result: MessageSyncResult
+): boolean {
+  if (result.uidValidityChanged === true) return true;
+  return checkpoint !== null && !checkpoint.uidValidityObserved;
 }
 
 /** Project the `AccountConfig` down to the safe subset the repository sees. */

@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type SyncOutcome, SyncService } from '../../src/app/services/SyncService.js';
 import { getConfigStore, resetConfigStore } from '../../src/core/config/ConfigStore.js';
 import { getDatabase, resetDatabase } from '../../src/core/database/Database.js';
+import type { PersistedEmail } from '../../src/core/database/index.js';
 import { actions, selectors } from '../../src/core/state/AppState.js';
 import type { AccountConfig, AppConfig } from '../../src/core/types/config.js';
 
@@ -40,6 +41,50 @@ function makeFakeSyncService(): FakeSyncService {
   return {
     syncAccountFolder: vi.fn(),
   };
+}
+
+function makeEmail(over: Partial<PersistedEmail> = {}): PersistedEmail {
+  const id = over.id ?? 'work:INBOX:1';
+  return {
+    id,
+    accountId: 'work',
+    folderId: 'work:INBOX',
+    messageId: `<${id}@example.com>`,
+    fromAddresses: [],
+    toAddresses: [],
+    ccAddresses: [],
+    subject: 'old generation',
+    date: 0,
+    internalDate: 0,
+    receivedAt: 0,
+    isRead: false,
+    isFlagged: false,
+    isAnswered: false,
+    isDraft: false,
+    hasAttachments: false,
+    size: 0,
+    bodyText: null,
+    bodyHtml: null,
+    headers: {},
+    attachments: [],
+    flags: [],
+    uid: 1,
+    createdAt: 0,
+    updatedAt: 0,
+    ...over,
+  };
+}
+
+/** Seed the in-memory state a committed replacement invalidates. */
+function seedStaleInboxState(): PersistedEmail {
+  const stale = makeEmail();
+  actions.setEmails([stale]);
+  actions.setSelectedEmail(stale.id);
+  actions.setOpenedEmail(stale.id);
+  actions.setSearchActive(true);
+  actions.setSearchQuery('old generation');
+  actions.setSearchHits([stale]);
+  return stale;
 }
 
 describe('App.requestSync', () => {
@@ -156,6 +201,7 @@ describe('App.requestSync', () => {
         },
       ],
       messages: [],
+      replacedFolderIds: [],
     };
     fake.syncAccountFolder.mockResolvedValueOnce(okOutcome);
 
@@ -171,6 +217,210 @@ describe('App.requestSync', () => {
       expect(selectors.syncStatus).toBe('success');
       expect(selectors.syncError).toBeNull();
       expect(selectors.emails).toEqual([]);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('clears stale search hits after a successful folder-cache replacement', async () => {
+    const fake = makeFakeSyncService();
+    const okOutcome: SyncOutcome = {
+      kind: 'ok',
+      folders: [],
+      messages: [],
+      replacedFolderIds: ['work:INBOX'],
+    };
+    fake.syncAccountFolder.mockResolvedValueOnce(okOutcome);
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('old generation');
+      actions.setSearchHits([]);
+      expect(selectors.searchHits).not.toBeNull();
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('success');
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('preserves search hits when no folder cache was replaced', async () => {
+    const fake = makeFakeSyncService();
+    const okOutcome: SyncOutcome = {
+      kind: 'ok',
+      folders: [],
+      messages: [],
+      replacedFolderIds: [],
+    };
+    fake.syncAccountFolder.mockResolvedValueOnce(okOutcome);
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('still current');
+      actions.setSearchHits([]);
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('success');
+      expect(selectors.searchHits).toEqual([]);
+      expect(selectors.searchActive).toBe(true);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('clears stale search hits when a committed replacement is followed by a read failure', async () => {
+    const fake = makeFakeSyncService();
+    fake.syncAccountFolder.mockResolvedValueOnce({
+      kind: 'network',
+      message: 'folder read failed',
+      replacedFolderIds: ['work:INBOX'],
+    });
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('old generation');
+      actions.setSearchHits([]);
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('folder read failed');
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('clears stale search hits when a committed replacement is followed by an auth failure', async () => {
+    const fake = makeFakeSyncService();
+    fake.syncAccountFolder.mockResolvedValueOnce({
+      kind: 'auth',
+      message: 'db auth failed',
+      replacedFolderIds: ['work:INBOX'],
+    });
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('old generation');
+      actions.setSearchHits([]);
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('db auth failed');
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('does not clear search hits when persistence fails before a committed replacement', async () => {
+    const fake = makeFakeSyncService();
+    fake.syncAccountFolder.mockResolvedValueOnce({
+      kind: 'network',
+      message: 'persist failed',
+    });
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('still current');
+      actions.setSearchHits([]);
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('persist failed');
+      expect(selectors.searchHits).toEqual([]);
+      expect(selectors.searchActive).toBe(true);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('clears stale messages, selection and open message after a network replacement error', async () => {
+    const fake = makeFakeSyncService();
+    fake.syncAccountFolder.mockResolvedValueOnce({
+      kind: 'network',
+      message: 'folder read failed',
+      replacedFolderIds: ['work:INBOX'],
+    });
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      seedStaleInboxState();
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('folder read failed');
+      expect(selectors.emails).toEqual([]);
+      expect(selectors.selectedEmailId).toBeNull();
+      expect(selectors.openedEmailId).toBeNull();
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('clears stale messages, selection and open message after an auth replacement error', async () => {
+    const fake = makeFakeSyncService();
+    fake.syncAccountFolder.mockResolvedValueOnce({
+      kind: 'auth',
+      message: 'db auth failed',
+      replacedFolderIds: ['work:INBOX'],
+    });
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      seedStaleInboxState();
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('db auth failed');
+      expect(selectors.emails).toEqual([]);
+      expect(selectors.selectedEmailId).toBeNull();
+      expect(selectors.openedEmailId).toBeNull();
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('preserves messages, selection, open message and search when persistence fails before a replacement commits', async () => {
+    const fake = makeFakeSyncService();
+    fake.syncAccountFolder.mockResolvedValueOnce({
+      kind: 'network',
+      message: 'persist failed',
+    });
+
+    const { app, renderer } = await makeApp(fake);
+    try {
+      const stale = seedStaleInboxState();
+
+      await pressR(app);
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('persist failed');
+      expect(selectors.emails.map((e) => e.id)).toEqual([stale.id]);
+      expect(selectors.selectedEmailId).toBe(stale.id);
+      expect(selectors.openedEmailId).toBe(stale.id);
+      expect(selectors.searchHits).toEqual([stale]);
+      expect(selectors.searchActive).toBe(true);
     } finally {
       renderer.stop();
       renderer.destroy();

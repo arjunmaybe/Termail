@@ -8,17 +8,17 @@
  *     `id = ${accountId}:${folderId}:${uid}`).
  *   - Per-(account, folder) sync state (`folder_sync_state`).
  *
- * Design notes (Phase 2.4 review, v4 update):
+ * Design notes (Phase 2.4 review, v5 update):
  *   - The application id is derived from the synchronization identity,
  *     not from `message_id`, so an empty `messageId` is still upsertable.
- *     Missing Message-IDs are stored as NULL (v4 schema makes
- *     `message_id` nullable); SQLite treats NULLs as distinct in the
- *     legacy UNIQUE, so multiple missing IDs coexist in one folder.
- *     Reads coerce NULL back to `''`.
+ *     Missing Message-IDs are stored as NULL (v4 made `message_id`
+ *     nullable), so multiple missing IDs coexist in one folder. Reads
+ *     coerce NULL back to `''`.
  *   - The `(account_id, folder_id, uid)` unique index is the
  *     synchronization identity. The legacy
- *     `UNIQUE (account_id, folder_id, message_id)` constraint is left
- *     in place as a defense-in-depth index for non-empty Message-IDs.
+ *     `UNIQUE (account_id, folder_id, message_id)` constraint was
+ *     removed by v5: distinct UIDs may legitimately share a Message-ID.
+ *     `message_id` is lookup data, not a mailbox identity.
  *   - `highest_uid` is updated with `MAX(highest_uid, excluded.highest_uid)`
  *     so it never regresses. Partial / error status updates omit the
  *     `highest_uid` column from the `SET` clause entirely.
@@ -64,6 +64,20 @@ export interface FolderSyncState {
   lastSyncAt: number | null;
   lastSyncStatus: SyncStatus;
   lastError: string | null;
+  /**
+   * The IMAP UIDVALIDITY generation last recorded for this folder, as an
+   * exact decimal string. `null` means the value is unavailable (either a
+   * successful sync observed no usable UIDVALIDITY, or the generation was
+   * never observed).
+   */
+  uidValidity: string | null;
+  /**
+   * Whether a successful sync has attempted to observe the generation.
+   * `false` marks a legacy/pre-v6 row whose checkpoint cannot be trusted
+   * for incremental use; `true` means `uidValidity` reflects a real
+   * observation (which may itself be `null`).
+   */
+  uidValidityObserved: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -134,6 +148,33 @@ export interface UpsertMessagesResult {
   highestUid: number;
 }
 
+/** Options for `upsertMessages`. */
+export interface UpsertMessagesOptions {
+  /**
+   * Highest UID whose FETCH range completed successfully. Used to advance
+   * the checkpoint across expunged UID gaps even when the range contained
+   * no messages. Must only be set after the whole range was fetched
+   * successfully; never after a fetch or persistence failure.
+   */
+  scannedThroughUid?: number;
+  /**
+   * The UIDVALIDITY generation observed by this sync, normalized to an
+   * exact decimal string, or `null` when the server reported no usable
+   * value. When this property is present (including explicit `null`) the
+   * row is marked as observed (`uid_validity_observed = 1`). When absent,
+   * the recorded generation is left untouched.
+   */
+  uidValidity?: string | null;
+  /**
+   * Replace the folder's cached messages with this batch. Deletes every
+   * `emails` row for the exact `(account_id, folder_id)` and overwrites
+   * `highest_uid` (bypassing the normal monotonic `MAX`) so a stale
+   * generation can be retired atomically. Use only on a detected
+   * generation change or an unverified legacy checkpoint.
+   */
+  replaceFolder?: boolean;
+}
+
 /** Options for `markSyncPartial` / `markSyncError`. */
 export interface SyncStatusOptions {
   /** Required status. */
@@ -152,6 +193,11 @@ export interface PersistSyncResultOptions {
   status?: SyncStatus;
   /** Error message for `'partial'` / `'error'`. Ignored when status is `'ok'`. */
   error?: string;
+  /**
+   * Replace the folder's cached messages with the result's batch. Set this
+   * when the caller has detected a UIDVALIDITY generation change.
+   */
+  replaceFolder?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -375,7 +421,8 @@ export class MessageRepository {
     const row = this.database
       .query(
         `SELECT account_id, folder_id, highest_uid, last_sync_at,
-                last_sync_status, last_error, created_at, updated_at
+                last_sync_status, last_error, uid_validity,
+                uid_validity_observed, created_at, updated_at
            FROM folder_sync_state
           WHERE account_id = ? AND folder_id = ?`
       )
@@ -387,6 +434,8 @@ export class MessageRepository {
           last_sync_at: number | null;
           last_sync_status: SyncStatus;
           last_error: string | null;
+          uid_validity: string | null;
+          uid_validity_observed: number;
           created_at: number;
           updated_at: number;
         }
@@ -399,6 +448,8 @@ export class MessageRepository {
       lastSyncAt: row.last_sync_at,
       lastSyncStatus: row.last_sync_status,
       lastError: row.last_error,
+      uidValidity: row.uid_validity,
+      uidValidityObserved: row.uid_validity_observed !== 0,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -411,15 +462,34 @@ export class MessageRepository {
    * and atomically advance the folder's sync state. All writes happen
    * inside a single transaction; on any failure nothing is persisted.
    *
+   * The checkpoint is the greater of the highest persisted message UID and
+   * `options.scannedThroughUid`. The latter lets a fully fetched range that
+   * contained only expunged UIDs advance past the gap.
+   *
+   * When `options.replaceFolder` is set (a UIDVALIDITY generation reset or
+   * the retirement of an unverified legacy checkpoint), the whole
+   * `(account_id, folder_id)` cache is deleted first and `highest_uid` is
+   * overwritten with the new batch's watermark — including `0` for an empty
+   * mailbox. That is the only path that bypasses the monotonic `MAX` rule.
+   *
+   * An empty batch with no scanned-through UID remains a no-op unless a
+   * replacement or a generation observation is requested.
+   *
    * Returns counts plus the new `highest_uid`. `last_sync_status` is
    * reset to `'ok'` and `last_error` is cleared.
    */
   upsertMessages(
     account: SafeAccountInput,
     folder: SyncFolder,
-    messages: ReadonlyArray<SyncMessage>
+    messages: ReadonlyArray<SyncMessage>,
+    options: UpsertMessagesOptions = {}
   ): UpsertMessagesResult {
-    if (messages.length === 0) {
+    const scannedThroughUid = options.scannedThroughUid ?? 0;
+    const replaceFolder = options.replaceFolder === true;
+    // A generation reset must always record the observed generation, even
+    // if the caller omitted the value (recorded as NULL / observed).
+    const hasUidValidity = replaceFolder || Object.hasOwn(options, 'uidValidity');
+    if (messages.length === 0 && scannedThroughUid <= 0 && !replaceFolder && !hasUidValidity) {
       return { inserted: 0, updated: 0, highestUid: 0 };
     }
 
@@ -456,26 +526,47 @@ export class MessageRepository {
         uid             = excluded.uid,
         updated_at      = strftime('%s', 'now')`;
 
+    const highestUidSet = replaceFolder
+      ? 'highest_uid     = excluded.highest_uid'
+      : 'highest_uid     = MAX(folder_sync_state.highest_uid, excluded.highest_uid)';
+    const generationSet = hasUidValidity
+      ? `,
+        uid_validity          = excluded.uid_validity,
+        uid_validity_observed = excluded.uid_validity_observed`
+      : '';
+
     const syncStateSql = `INSERT INTO folder_sync_state
         (account_id, folder_id, highest_uid, last_sync_at,
-         last_sync_status, last_error, created_at, updated_at)
+         last_sync_status, last_error, created_at, updated_at,
+         uid_validity, uid_validity_observed)
       VALUES (?, ?, ?, strftime('%s', 'now'), 'ok', NULL,
-              strftime('%s', 'now'), strftime('%s', 'now'))
+              strftime('%s', 'now'), strftime('%s', 'now'), ?, ?)
       ON CONFLICT(account_id, folder_id) DO UPDATE SET
-        highest_uid     = MAX(folder_sync_state.highest_uid, excluded.highest_uid),
+        ${highestUidSet},
         last_sync_at    = strftime('%s', 'now'),
         last_sync_status = 'ok',
         last_error      = NULL,
-        updated_at      = strftime('%s', 'now')`;
+        updated_at      = strftime('%s', 'now')${generationSet}`;
+
+    const uidValidityValue = hasUidValidity ? (options.uidValidity ?? null) : null;
+    const uidValidityObserved = hasUidValidity ? 1 : 0;
 
     let inserted = 0;
     let updated = 0;
-    let highestUid = 0;
+    let highestUid = scannedThroughUid;
 
     try {
       this.database.transaction(() => {
         const upsertStmt = this.database.query(upsertSql);
         const stateStmt = this.database.query(syncStateSql);
+
+        // A replacement retires the whole generation. FTS delete triggers
+        // fire per row inside this transaction, so the index stays in sync.
+        if (replaceFolder) {
+          this.database
+            .query('DELETE FROM emails WHERE account_id = ? AND folder_id = ?')
+            .run(account.id, folderId);
+        }
 
         for (const m of messages) {
           const id = deriveEmailId(account.id, folderId, m.uid);
@@ -513,7 +604,7 @@ export class MessageRepository {
           if (m.uid > highestUid) highestUid = m.uid;
         }
 
-        stateStmt.run(account.id, folderId, highestUid);
+        stateStmt.run(account.id, folderId, highestUid, uidValidityValue, uidValidityObserved);
       });
     } catch (error) {
       throw new DatabaseError(
@@ -527,6 +618,7 @@ export class MessageRepository {
       inserted,
       updated,
       highestUid,
+      replacedFolder: replaceFolder,
     });
 
     return { inserted, updated, highestUid };
@@ -819,7 +911,14 @@ export function persistSyncResult(
   if (status !== 'ok' && !options.error) {
     throw new DatabaseError(`persistSyncResult: status="${status}" requires options.error`);
   }
-  const upsert = repo.upsertMessages(account, folder, result.messages);
+  const upsert = repo.upsertMessages(account, folder, result.messages, {
+    // The scanned-through watermark and the generation observation are only
+    // valid for a clean result.
+    ...(status === 'ok'
+      ? { scannedThroughUid: result.scannedThroughUid, uidValidity: result.uidValidity }
+      : {}),
+    ...(status === 'ok' && options.replaceFolder === true ? { replaceFolder: true } : {}),
+  });
   if (status === 'partial') {
     repo.markSyncPartial(account, folder, options.error as string);
   } else if (status === 'error') {
@@ -832,10 +931,16 @@ export function persistSyncResult(
  * Build the `MessageSyncLimits` for the next sync of a folder from the
  * persisted sync state. `sinceUid` is exclusive per the Phase 2.3
  * `buildFetchRange` semantics, so the returned limit equals the
- * previously recorded `highest_uid`. If there is no recorded state,
- * `undefined` is returned (caller will perform a full sync).
+ * previously recorded `highest_uid`.
+ *
+ * Returns `undefined` (caller performs a full sync) when there is no
+ * recorded state, or when the state is a legacy/pre-v6 row whose UID
+ * generation was never observed and whose checkpoint therefore cannot be
+ * trusted. A state whose generation was observed as unavailable (`NULL`)
+ * is still usable for incremental sync.
  */
 export function buildImapSyncLimits(state: FolderSyncState | null): MessageSyncLimits | undefined {
   if (!state) return undefined;
+  if (!state.uidValidityObserved) return undefined;
   return { sinceUid: state.highestUid };
 }

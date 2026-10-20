@@ -76,6 +76,38 @@ export function buildFetchRange(sinceUid?: number): string {
   return '1:*';
 }
 
+/**
+ * Normalize an IMAP UIDVALIDITY value from `imapflow` into the exact
+ * decimal string used as the persisted generation marker.
+ *
+ * The installed `imapflow` types `MailboxObject.uidValidity` as `bigint`,
+ * but the runtime value is only guaranteed when the server sent a usable
+ * `[UIDVALIDITY n]`. This normalizer is deliberately defensive:
+ *
+ *   - `bigint`: accepted when strictly positive; converted with `.toString()`
+ *     so the exact value never passes through JavaScript `Number`.
+ *   - `number`: accepted only when a positive safe integer.
+ *   - `string`: accepted only when a positive run of ASCII digits; leading
+ *     zeros are stripped without numeric conversion.
+ *   - Anything else (absent, `null`, `undefined`, `NaN`, zero, negative,
+ *     non-numeric, objects) is treated as unavailable and returns `null`.
+ */
+export function normalizeUidValidity(value: unknown): string | null {
+  if (typeof value === 'bigint') {
+    return value > 0n ? value.toString() : null;
+  }
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? String(value) : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) return null;
+    const significant = trimmed.replace(/^0+/, '');
+    return significant.length > 0 ? significant : null;
+  }
+  return null;
+}
+
 /** Split a range string of the form `A:*` into UID batches of size N. */
 export function planBatches(opts: {
   upperUid: number;
@@ -284,32 +316,31 @@ export async function normalizeFetchedMessage(args: {
   };
 }
 
-/**
- * Dedupe a list of normalized messages. Primary key is UID; secondary
- * key is a non-empty Message-ID. First occurrence wins, preserving the
- * input order. Returns `{ unique, deduped }` where `deduped` is the
- * number of dropped entries.
- */
-export function dedupeMessages(messages: ReadonlyArray<SyncMessage>): {
+/** Result of `dedupeMessages`. */
+export interface DedupeResult {
+  /** Messages that survived UID deduplication. */
   unique: SyncMessage[];
+  /** Number of duplicate UID entries that were dropped. */
   deduped: number;
-} {
+}
+
+/**
+ * Dedupe a list of normalized messages by IMAP UID. First occurrence
+ * wins, preserving input order. Message-ID is deliberately not part of
+ * the identity: distinct UIDs may legitimately share a Message-ID, and
+ * both must reach persistence so the checkpoint can advance past them.
+ */
+export function dedupeMessages(messages: ReadonlyArray<SyncMessage>): DedupeResult {
   const seenUids = new Set<number>();
-  const seenMessageIds = new Set<string>();
   const unique: SyncMessage[] = [];
   for (const m of messages) {
     if (seenUids.has(m.uid)) {
       continue;
     }
-    if (m.messageId.length > 0) {
-      if (seenMessageIds.has(m.messageId)) {
-        continue;
-      }
-      seenMessageIds.add(m.messageId);
-    }
     seenUids.add(m.uid);
     unique.push(m);
   }
+
   return { unique, deduped: messages.length - unique.length };
 }
 

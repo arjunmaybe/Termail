@@ -126,6 +126,7 @@ describe('SyncService incremental sync', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage(5)],
     } satisfies MessageSyncResult);
     const first = await service.syncAccountFolder(baseAccount, 'INBOX');
@@ -143,12 +144,16 @@ describe('SyncService incremental sync', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage(6)],
     } satisfies MessageSyncResult);
     const second = await service.syncAccountFolder(baseAccount, 'INBOX');
     expect(second.kind).toBe('ok');
     expect(fake.syncMessages).toHaveBeenCalledTimes(2);
-    expect(fake.syncMessages.mock.calls[1]?.[1]).toEqual({ limits: { sinceUid: 5 } });
+    expect(fake.syncMessages.mock.calls[1]?.[1]).toEqual({
+      limits: { sinceUid: 5 },
+      expectedUidValidity: null,
+    });
     expect(repo.getSyncState('work', 'work:INBOX')?.highestUid).toBe(6);
   });
 
@@ -163,6 +168,7 @@ describe('SyncService incremental sync', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage(10)],
     } satisfies MessageSyncResult);
     await service.syncAccountFolder(baseAccount, 'INBOX');
@@ -183,12 +189,13 @@ describe('SyncService incremental sync', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage(11)],
     } satisfies MessageSyncResult);
     const recovered = await service.syncAccountFolder(baseAccount, 'INBOX');
     expect(recovered.kind).toBe('ok');
     const lastCall = fake.syncMessages.mock.calls[fake.syncMessages.mock.calls.length - 1]?.[1];
-    expect(lastCall).toEqual({ limits: { sinceUid: 10 } });
+    expect(lastCall).toEqual({ limits: { sinceUid: 10 }, expectedUidValidity: null });
     expect(repo.getSyncState('work', 'work:INBOX')?.highestUid).toBe(11);
   });
 });

@@ -143,8 +143,27 @@ export interface MessageSyncResult {
   total: number;
   /** Messages that were successfully normalized. */
   parsed: number;
-  /** Messages dropped as duplicates by UID or Message-ID. */
+  /** Messages dropped as duplicate UID entries. */
   deduped: number;
+  /**
+   * Highest UID whose FETCH range completed successfully, including UIDs
+   * that returned no message because they were expunged. Omitted when no
+   * UID range was scanned or when the fetch failed. This is the upper
+   * bound for the checkpoint.
+   */
+  scannedThroughUid?: number;
+  /**
+   * The UIDVALIDITY generation observed on the mailbox for this sync,
+   * normalized to an exact decimal string. `null` when the server did not
+   * report a usable value. Always present on a successful result.
+   */
+  uidValidity: string | null;
+  /**
+   * True when the caller supplied `expectedUidValidity` and the observed
+   * generation differed. On a change the caller's `sinceUid` limit is
+   * deliberately ignored and the whole mailbox is scanned from the start.
+   */
+  uidValidityChanged?: boolean;
   /** Deterministic, deduped, newest-first message list. */
   messages: SyncMessage[];
 }
@@ -163,4 +182,19 @@ export interface MessageSyncLimits {
 
 export interface MessageSyncOptions {
   limits?: MessageSyncLimits;
+  /**
+   * The UIDVALIDITY generation the caller believes the folder is in, taken
+   * from persisted sync state.
+   *
+   *   - omitted: no previous observation exists; no change detection is
+   *     performed and `limits.sinceUid` (if any) is honored.
+   *   - `null`: a previous sync successfully observed that the server
+   *     reported no usable UIDVALIDITY.
+   *   - string: a previous sync observed this exact decimal generation.
+   *
+   * When supplied and it differs from the value observed on `mailboxOpen`,
+   * the scan ignores `limits.sinceUid` and starts from the beginning of the
+   * mailbox; the result sets `uidValidityChanged`.
+   */
+  expectedUidValidity?: string | null;
 }

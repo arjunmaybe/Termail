@@ -439,15 +439,31 @@ export class App extends BoxRenderable {
           const messages: PersistedEmail[] = outcome.messages;
           actions.setEmails(messages);
         }
+        if (outcome.replacedFolderIds.length > 0) {
+          // The previous UID generation's rows were deleted from the DB;
+          // in-memory search hits may still reference them.
+          actions.clearSearch();
+        }
         actions.setSyncStatus('success');
         break;
       }
       case 'auth':
+      case 'network': {
+        if (outcome.replacedFolderIds && outcome.replacedFolderIds.length > 0) {
+          // A committed replacement's rows were deleted from the DB before
+          // the failure; in-memory search hits may still reference them.
+          actions.clearSearch();
+          // The current folder's cache was replaced, but the fresh read
+          // failed. Drop the stale list, highlight and open message so
+          // deleted-generation rows are never shown or acted on. Skipped
+          // when the user navigated during the sync.
+          if (stillRelevant && outcome.replacedFolderIds.includes(requestFolderId)) {
+            actions.setEmails([]);
+          }
+        }
         actions.setSyncError(outcome.message);
         break;
-      case 'network':
-        actions.setSyncError(outcome.message);
-        break;
+      }
       case 'no-account':
         actions.setSyncError('No account configured');
         break;
@@ -515,6 +531,11 @@ export class App extends BoxRenderable {
           actions.setFolders(folders);
           actions.setEmails(outcome.messages);
         }
+        if (outcome.replacedFolderIds.length > 0) {
+          // The previous UID generation's rows were deleted from the DB;
+          // in-memory search hits may still reference them.
+          actions.clearSearch();
+        }
         actions.setSyncStatus('success');
         break;
       }
@@ -527,6 +548,22 @@ export class App extends BoxRenderable {
         // a reload failure must not mask the original sync error.
         if (accountStillRelevant) {
           this.reloadFoldersForAccount(accountId);
+        }
+        if (outcome.replacedFolderIds && outcome.replacedFolderIds.length > 0) {
+          // A committed replacement's rows were deleted from the DB before
+          // the failure; in-memory search hits may still reference them.
+          actions.clearSearch();
+          // Folder reload may just have selected the replaced folder. Only
+          // clear the list/highlight/open message when that folder is the
+          // one the user is now viewing.
+          const currentFolderId = selectors.currentFolderId;
+          if (
+            accountStillRelevant &&
+            currentFolderId !== null &&
+            outcome.replacedFolderIds.includes(currentFolderId)
+          ) {
+            actions.setEmails([]);
+          }
         }
         actions.setSyncError(
           outcome.kind === 'no-account' ? 'No account configured' : outcome.message

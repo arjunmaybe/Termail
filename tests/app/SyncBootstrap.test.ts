@@ -137,6 +137,7 @@ describe('SyncService.syncAccount bootstrap', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage(1)],
     } satisfies MessageSyncResult);
 
@@ -166,6 +167,7 @@ describe('SyncService.syncAccount bootstrap', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage(5)],
     } satisfies MessageSyncResult);
     await service.syncAccount(baseAccount);
@@ -176,11 +178,15 @@ describe('SyncService.syncAccount bootstrap', () => {
       total: 1,
       parsed: 1,
       deduped: 0,
+      uidValidity: null,
       messages: [makeMessage(6)],
     } satisfies MessageSyncResult);
     const second = await service.syncAccount(baseAccount);
     expect(second.kind).toBe('ok');
-    expect(fake.syncMessages.mock.calls[1]?.[1]).toEqual({ limits: { sinceUid: 5 } });
+    expect(fake.syncMessages.mock.calls[1]?.[1]).toEqual({
+      limits: { sinceUid: 5 },
+      expectedUidValidity: null,
+    });
   });
 
   it('message fetch failure preserves folders and returns network without advancing checkpoint', async () => {

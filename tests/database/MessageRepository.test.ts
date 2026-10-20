@@ -5,7 +5,7 @@
  *   - migration / FTS preservation
  *   - credential non-leak
  *   - account / folder idempotence
- *   - message upsert (round-trip, empty message_id, dedup, cross-folder)
+ *   - message upsert (round-trip, empty message_id, shared Message-ID, cross-folder)
  *   - sync state monotonicity
  *   - persistSyncResult status mapping
  *   - failure modes
@@ -97,9 +97,8 @@ function makeMessage(over: Partial<SyncMessage> = {}): SyncMessage {
   const uid = over.uid ?? 1;
   return {
     uid,
-    // Default messageId is unique per uid so tests don't trip the legacy
-    // `UNIQUE (account_id, folder_id, message_id)` constraint when they
-    // batch multiple uids together.
+    // Default messageId is unique per uid; tests that exercise shared
+    // Message-IDs override it explicitly.
     messageId: `<msg-${uid}@example.com>`,
     folder: 'INBOX',
     accountId: 'work',
@@ -132,6 +131,7 @@ function makeSyncResult(
     total: messages.length,
     parsed: messages.length,
     deduped: 0,
+    uidValidity: null,
     messages,
     ...over,
   };
@@ -177,9 +177,9 @@ describe('MessageRepository', () => {
   // -------------------------------------------------------------------------
 
   describe('migration', () => {
-    it('runs v1 then v2 then v3 then v4 on a fresh database', () => {
+    it('runs v1 through v6 on a fresh database', () => {
       const version = db.query('SELECT version FROM schema_version').get() as { version: number };
-      expect(version.version).toBe(4);
+      expect(version.version).toBe(6);
     });
 
     it('adds the new columns on emails', () => {
@@ -265,7 +265,7 @@ describe('MessageRepository', () => {
       expect(true).toBe(true);
     });
 
-    it('preserves pre-existing v1 email rows on a real v1 → v4 upgrade', async () => {
+    it('preserves pre-existing v1 email rows on a real v1 → v5 upgrade', async () => {
       // Build a brand-new DB that looks exactly like a v1 install,
       // then point a fresh Database at it and run migrations.
       const v1Path = join(tmpdir(), `termail-v1-${Date.now()}-${Math.random()}.sqlite`);
@@ -376,7 +376,7 @@ describe('MessageRepository', () => {
         fresh.close();
 
         // Now open that file with the real Database class and let it
-        // run the v1→v2→v3→v4 migrations.
+        // run the v1→v2→v3→v4→v5 migrations.
         resetDatabase();
         const upgradedPath = v1Path; // reuse the same file
         const v1ConfigPath = join(tmpdir(), `termail-v1-cfg-${Date.now()}-${Math.random()}.json`);
@@ -388,7 +388,7 @@ describe('MessageRepository', () => {
 
         // Migrations applied.
         const v = v1Db.query('SELECT version FROM schema_version').get() as { version: number };
-        expect(v.version).toBe(4);
+        expect(v.version).toBe(6);
 
         // Legacy row is still here, with uid = NULL.
         const legacy = v1Db
@@ -433,7 +433,7 @@ describe('MessageRepository', () => {
       }
     });
 
-    it('v4 converts legacy empty message_id to NULL and allows a second missing ID', async () => {
+    it('v4/v5 convert legacy empty message_id to NULL and allow a second missing ID', async () => {
       const v1Path = join(tmpdir(), `termail-v1-empty-${Date.now()}-${Math.random()}.sqlite`);
       const v1ConfigPath = join(
         tmpdir(),
@@ -543,7 +543,7 @@ describe('MessageRepository', () => {
         await upgraded.initialize();
 
         const v = upgraded.query('SELECT version FROM schema_version').get() as { version: number };
-        expect(v.version).toBe(4);
+        expect(v.version).toBe(6);
         // Legacy '' is now NULL.
         const raw = upgraded
           .query('SELECT message_id FROM emails WHERE id = ?')
@@ -659,6 +659,24 @@ describe('MessageRepository', () => {
       expect(s).toBeNull();
     });
 
+    it('advances the checkpoint through a scanned range with no messages', () => {
+      const r = repo.upsertMessages(baseAccount, inboxFolder, [], {
+        scannedThroughUid: 1000,
+      });
+      expect(r).toEqual({ inserted: 0, updated: 0, highestUid: 1000 });
+      const c = db.query('SELECT COUNT(*) AS c FROM emails').get() as { c: number };
+      expect(c.c).toBe(0);
+      const s = repo.getSyncState(baseAccount.id, 'work:INBOX');
+      expect(s?.highestUid).toBe(1000);
+      expect(s?.lastSyncStatus).toBe('ok');
+    });
+
+    it('does not regress a higher checkpoint when the watermark is lower', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 20 })]);
+      repo.upsertMessages(baseAccount, inboxFolder, [], { scannedThroughUid: 10 });
+      expect(repo.getSyncState(baseAccount.id, 'work:INBOX')?.highestUid).toBe(20);
+    });
+
     it('round-trips a SyncMessage without losing any field', () => {
       const att: SyncAttachment = makeAttachment({
         filename: 'pic.png',
@@ -711,10 +729,10 @@ describe('MessageRepository', () => {
       expect(got!.messageId).toBe('');
     });
 
-    it('persists two messages with missing Message-IDs in the same folder (v4)', () => {
+    it('persists two messages with missing Message-IDs in the same folder', () => {
       // Authoritative identity is (account_id, folder_id, uid). Two
       // distinct UIDs with no Message-ID must coexist; the repository
-      // stores NULL so the legacy UNIQUE does not collide.
+      // stores NULL, and v5 does not impose Message-ID uniqueness.
       const m1 = makeMessage({ uid: 11, messageId: '', subject: 'No ID one' });
       const m2 = makeMessage({ uid: 12, messageId: '', subject: 'No ID two' });
       const r = repo.upsertMessages(baseAccount, inboxFolder, [m1, m2]);
@@ -726,7 +744,7 @@ describe('MessageRepository', () => {
       expect(got2).not.toBeNull();
       expect(got1!.messageId).toBe('');
       expect(got2!.messageId).toBe('');
-      // Raw storage is NULL (NULLs never collide in the UNIQUE).
+      // Raw storage is NULL for a missing Message-ID.
       const raw = db
         .query('SELECT message_id FROM emails WHERE id IN (?, ?)')
         .all(`${baseAccount.id}:work:INBOX:11`, `${baseAccount.id}:work:INBOX:12`) as {
@@ -748,7 +766,7 @@ describe('MessageRepository', () => {
       expect(bySubject).toEqual(['No ID one', 'No ID two']);
     });
 
-    it('mixes missing and present Message-IDs without collision (v4)', () => {
+    it('mixes missing and present Message-IDs without collision', () => {
       repo.upsertMessages(baseAccount, inboxFolder, [
         makeMessage({ uid: 21, messageId: '', subject: 'Missing ID' }),
         makeMessage({ uid: 22, messageId: '<real-22@example.com>', subject: 'Real ID' }),
@@ -803,15 +821,43 @@ describe('MessageRepository', () => {
       expect(rows).toHaveLength(2);
     });
 
-    it('rejects two messages with the same (folder, messageId) — legacy UNIQUE constraint', () => {
-      // The v1 schema's `UNIQUE (account_id, folder_id, message_id)` is
-      // intentionally left in place. Two distinct IMAP messages in the
-      // same folder that share a Message-ID are an upstream bug, and
-      // the repository surfaces it as a `DatabaseError` rather than
-      // silently rewriting the second message's identity.
-      const m1 = makeMessage({ uid: 1, messageId: '<dup@example.com>' });
-      const m2 = makeMessage({ uid: 2, messageId: '<dup@example.com>' });
-      expect(() => repo.upsertMessages(baseAccount, inboxFolder, [m1, m2])).toThrow(DatabaseError);
+    it('persists two distinct UIDs that share a Message-ID in one folder', () => {
+      // The identity is (account_id, folder_id, uid); Message-ID is not
+      // unique. Both entries are real mailbox messages and must persist.
+      const m1 = makeMessage({ uid: 1, messageId: '<dup@example.com>', subject: 'First' });
+      const m2 = makeMessage({ uid: 2, messageId: '<dup@example.com>', subject: 'Second' });
+      const r = repo.upsertMessages(baseAccount, inboxFolder, [m1, m2]);
+      expect(r).toEqual({ inserted: 2, updated: 0, highestUid: 2 });
+
+      const rows = db
+        .query('SELECT id, uid, message_id, subject FROM emails ORDER BY uid')
+        .all() as { id: string; uid: number; message_id: string; subject: string }[];
+      expect(rows).toHaveLength(2);
+      expect(rows.map((row) => row.uid)).toEqual([1, 2]);
+      expect(rows.every((row) => row.message_id === '<dup@example.com>')).toBe(true);
+      expect(rows.map((row) => row.subject)).toEqual(['First', 'Second']);
+    });
+
+    it('re-upserting shared-Message-ID UIDs updates rows instead of duplicating them', () => {
+      const m1 = makeMessage({ uid: 1, messageId: '<dup@example.com>', subject: 'First' });
+      const m2 = makeMessage({ uid: 2, messageId: '<dup@example.com>', subject: 'Second' });
+      repo.upsertMessages(baseAccount, inboxFolder, [m1, m2]);
+
+      const r = repo.upsertMessages(baseAccount, inboxFolder, [
+        { ...m1, subject: 'First updated', isRead: true },
+        { ...m2, subject: 'Second updated' },
+      ]);
+      expect(r).toEqual({ inserted: 0, updated: 2, highestUid: 2 });
+
+      const rows = db.query('SELECT uid, subject, is_read FROM emails ORDER BY uid').all() as {
+        uid: number;
+        subject: string;
+        is_read: number;
+      }[];
+      expect(rows).toEqual([
+        { uid: 1, subject: 'First updated', is_read: 1 },
+        { uid: 2, subject: 'Second updated', is_read: 0 },
+      ]);
     });
 
     it('inserts are atomic: a thrown mid-batch leaves no rows', () => {
@@ -829,6 +875,32 @@ describe('MessageRepository', () => {
       ]);
       const c = db.query('SELECT COUNT(*) AS c FROM emails').get() as { c: number };
       expect(c.c).toBe(2);
+    });
+
+    it('does not advance the checkpoint when the batch fails to persist', () => {
+      // Force a failure inside the transaction. The scanned-through
+      // watermark and every message write must roll back atomically.
+      db.exec(`
+        CREATE TRIGGER force_batch_failure
+        BEFORE INSERT ON emails
+        WHEN NEW.uid = 2
+        BEGIN
+          SELECT RAISE(ABORT, 'forced batch failure');
+        END;
+      `);
+
+      expect(() =>
+        repo.upsertMessages(
+          baseAccount,
+          inboxFolder,
+          [makeMessage({ uid: 1 }), makeMessage({ uid: 2 })],
+          { scannedThroughUid: 1000 }
+        )
+      ).toThrow(DatabaseError);
+
+      expect(repo.getSyncState(baseAccount.id, 'work:INBOX')).toBeNull();
+      const c = db.query('SELECT COUNT(*) AS c FROM emails').get() as { c: number };
+      expect(c.c).toBe(0);
     });
   });
 
@@ -867,6 +939,51 @@ describe('MessageRepository', () => {
       expect(s!.highestUid).toBe(20);
     });
 
+    it('an explicit replacement overwrites the checkpoint and recorded generation', () => {
+      repo.upsertMessages(
+        baseAccount,
+        inboxFolder,
+        [makeMessage({ uid: 10 }), makeMessage({ uid: 20 })],
+        { uidValidity: '1' }
+      );
+      expect(repo.getSyncState(baseAccount.id, 'work:INBOX')!.highestUid).toBe(20);
+
+      const result = repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 5 })], {
+        uidValidity: '2',
+        replaceFolder: true,
+      });
+      expect(result.highestUid).toBe(5);
+      const rows = repo.listByFolder(baseAccount.id, 'work:INBOX', 10);
+      expect(rows.map((row) => row.uid)).toEqual([5]);
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.highestUid).toBe(5);
+      expect(state.uidValidity).toBe('2');
+      expect(state.uidValidityObserved).toBe(true);
+    });
+
+    it('an explicit replacement of an empty mailbox stores highest_uid = 0', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 10 })], {
+        uidValidity: '1',
+      });
+
+      repo.upsertMessages(baseAccount, inboxFolder, [], {
+        uidValidity: '2',
+        replaceFolder: true,
+      });
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.highestUid).toBe(0);
+      expect(state.uidValidity).toBe('2');
+      expect(state.uidValidityObserved).toBe(true);
+      expect(repo.listByFolder(baseAccount.id, 'work:INBOX', 10)).toEqual([]);
+    });
+
+    it('leaves the generation unobserved when uidValidity is not supplied', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 1 })]);
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.uidValidity).toBeNull();
+      expect(state.uidValidityObserved).toBe(false);
+    });
+
     it('a successful upsert resets status from error/partial to ok', () => {
       repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 1 })]);
       repo.markSyncError(baseAccount, inboxFolder, 'boom');
@@ -898,6 +1015,25 @@ describe('MessageRepository', () => {
       expect(after.highestUid).toBe(before);
       expect(after.lastSyncStatus).toBe('error');
       expect(after.lastError).toBe('db down');
+    });
+
+    it('markSyncPartial and markSyncError preserve the generation marker', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 10 })], {
+        uidValidity: '7',
+      });
+      expect(repo.getSyncState(baseAccount.id, 'work:INBOX')!.uidValidity).toBe('7');
+
+      repo.markSyncPartial(baseAccount, inboxFolder, 'partial failure');
+      let state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.uidValidity).toBe('7');
+      expect(state.uidValidityObserved).toBe(true);
+      expect(state.highestUid).toBe(10);
+
+      repo.markSyncError(baseAccount, inboxFolder, 'db down');
+      state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.uidValidity).toBe('7');
+      expect(state.uidValidityObserved).toBe(true);
+      expect(state.highestUid).toBe(10);
     });
 
     it('markSyncPartial/Error can be called before any successful upsert', () => {
@@ -937,6 +1073,17 @@ describe('MessageRepository', () => {
       const s = repo.getSyncState(baseAccount.id, 'work:INBOX');
       expect(s!.lastSyncStatus).toBe('ok');
       expect(s!.lastError).toBeNull();
+    });
+
+    it('applies the scanned-through watermark for a clean result', () => {
+      const r = persistSyncResult(
+        repo,
+        baseAccount,
+        inboxFolder,
+        makeSyncResult([], { scannedThroughUid: 600 })
+      );
+      expect(r.highestUid).toBe(600);
+      expect(repo.getSyncState(baseAccount.id, 'work:INBOX')?.highestUid).toBe(600);
     });
 
     it('options.status = "partial" records "partial" with the error', () => {
@@ -986,22 +1133,37 @@ describe('MessageRepository', () => {
   // -------------------------------------------------------------------------
 
   describe('buildImapSyncLimits', () => {
+    const state: FolderSyncState = {
+      accountId: 'work',
+      folderId: 'work:INBOX',
+      highestUid: 42,
+      lastSyncAt: 1,
+      lastSyncStatus: 'ok',
+      lastError: null,
+      uidValidity: '1',
+      uidValidityObserved: true,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+
     it('returns undefined when there is no sync state', () => {
       expect(buildImapSyncLimits(null)).toBeUndefined();
     });
 
     it('returns { sinceUid: highestUid } when there is state', () => {
-      const state: FolderSyncState = {
-        accountId: 'work',
-        folderId: 'work:INBOX',
-        highestUid: 42,
-        lastSyncAt: 1,
-        lastSyncStatus: 'ok',
-        lastError: null,
-        createdAt: 0,
-        updatedAt: 0,
-      };
       expect(buildImapSyncLimits(state)).toEqual({ sinceUid: 42 });
+    });
+
+    it('returns undefined for a legacy checkpoint whose generation was never observed', () => {
+      expect(
+        buildImapSyncLimits({ ...state, uidValidity: null, uidValidityObserved: false })
+      ).toBeUndefined();
+    });
+
+    it('uses the checkpoint when the generation was observed as unavailable', () => {
+      expect(
+        buildImapSyncLimits({ ...state, uidValidity: null, uidValidityObserved: true })
+      ).toEqual({ sinceUid: 42 });
     });
   });
 

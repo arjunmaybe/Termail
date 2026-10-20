@@ -37,6 +37,7 @@ import {
   dedupeMessages,
   extractBodyAsync,
   normalizeFetchedMessage,
+  normalizeUidValidity,
   planBatches,
   resolveLimits,
   sortNewestFirst,
@@ -287,10 +288,27 @@ export class ImapService {
     }
 
     try {
+      // The generation check must happen immediately after the mailbox is
+      // selected and before any FETCH that uses the old checkpoint: a
+      // UIDVALIDITY change invalidates every UID in the stored state.
+      const observedUidValidity = normalizeUidValidity(mailbox.uidValidity);
+      const uidValidityChanged =
+        options.expectedUidValidity !== undefined &&
+        options.expectedUidValidity !== observedUidValidity;
+      const effectiveSinceUid = uidValidityChanged ? undefined : limits.sinceUid;
+      if (uidValidityChanged) {
+        logger.warn('IMAP UIDVALIDITY changed; rescanning folder from the start', {
+          accountId,
+          folder: folderPath,
+          expectedUidValidity: options.expectedUidValidity,
+          observedUidValidity,
+        });
+      }
+
       const upperUid = Number(mailbox.uidNext) - 1;
       const batches = planBatches({
         upperUid,
-        sinceUid: limits.sinceUid ?? 0,
+        sinceUid: effectiveSinceUid ?? 0,
         batchSize: limits.batchSize,
         maxMessages: limits.maxMessages,
       });
@@ -299,6 +317,13 @@ export class ImapService {
       const receivedAt = new Date();
       const collected: SyncMessage[] = [];
       let total = 0;
+
+      // If every batch below succeeds, the entire range through the last
+      // batch's `to` has been queried. UIDs in that range that returned no
+      // message were expunged; UIDs are never reused within a UIDVALIDITY
+      // generation, so this upper bound is safe to record as scanned.
+      const lastBatch = batches.length > 0 ? batches[batches.length - 1] : undefined;
+      const scannedThroughUid = lastBatch?.to;
 
       for (const batch of batches) {
         const range = `${batch.from}:${batch.to}`;
@@ -324,11 +349,15 @@ export class ImapService {
 
       const deduped = dedupeMessages(collected);
       const messages = sortNewestFirst(deduped.unique);
+
       return {
         folder: folderPath,
         total,
         parsed: messages.length,
         deduped: deduped.deduped,
+        ...(scannedThroughUid !== undefined ? { scannedThroughUid } : {}),
+        uidValidity: observedUidValidity,
+        ...(uidValidityChanged ? { uidValidityChanged: true } : {}),
         messages,
       };
     } finally {

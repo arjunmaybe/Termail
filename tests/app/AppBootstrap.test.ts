@@ -162,6 +162,7 @@ describe('App.requestSync fresh-account bootstrap', () => {
         kind: 'ok',
         folders: [inbox, sent],
         messages: [makeEmail('personal:INBOX:1')],
+        replacedFolderIds: [],
       } satisfies SyncOutcome),
     };
     const { app, renderer } = await makeApp(fake);
@@ -223,6 +224,155 @@ describe('App.requestSync fresh-account bootstrap', () => {
       // Folders preserved despite failure; no misleading messages.
       expect(selectors.folders.map((f) => f.fullName)).toEqual(['INBOX']);
       expect(selectors.emails).toEqual([]);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('clears stale search hits after a committed replacement even when the post-persistence read fails', async () => {
+    const fake = {
+      syncAccountFolder: vi.fn(),
+      syncAccount: vi.fn().mockResolvedValue({
+        kind: 'network',
+        message: 'folder read failed',
+        replacedFolderIds: ['personal:INBOX'],
+      } satisfies SyncOutcome),
+    };
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('old generation');
+      actions.setSearchHits([]);
+
+      await app.requestSync();
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('folder read failed');
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('does not clear search hits when bootstrap persistence fails before a committed replacement', async () => {
+    const fake = {
+      syncAccountFolder: vi.fn(),
+      syncAccount: vi.fn().mockResolvedValue({
+        kind: 'network',
+        message: 'persist failed',
+      } satisfies SyncOutcome),
+    };
+    const { app, renderer } = await makeApp(fake);
+    try {
+      actions.setSearchActive(true);
+      actions.setSearchQuery('still current');
+      actions.setSearchHits([]);
+
+      await app.requestSync();
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('persist failed');
+      expect(selectors.searchHits).toEqual([]);
+      expect(selectors.searchActive).toBe(true);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('clears stale messages after a committed replacement error once the folder reload selects it', async () => {
+    const fake = {
+      syncAccountFolder: vi.fn(),
+      // Simulate SyncService.syncAccount persisting INBOX before the
+      // post-persistence read fails: the fake writes the folder row, so
+      // `reloadFoldersForAccount` can select it.
+      syncAccount: vi.fn().mockImplementation(async () => {
+        const { MessageRepository } = await import('../../src/core/database/MessageRepository.js');
+        const db = getDatabase(getConfigStore().getConfig());
+        const repo = new MessageRepository(db);
+        repo.ensureAccountRow({
+          id: 'personal',
+          name: 'Personal',
+          email: 'me@gmail.com',
+          host: 'imap.gmail.com',
+          port: 993,
+          useTls: true,
+          authType: 'password',
+        });
+        repo.ensureFolderRow('personal', {
+          path: 'INBOX',
+          displayName: 'INBOX',
+          delimiter: '/',
+          flags: [],
+          specialUse: 'inbox',
+          type: 'inbox',
+          selectable: true,
+          parentPath: null,
+          depth: 0,
+        });
+        return {
+          kind: 'network',
+          message: 'folder read failed',
+          replacedFolderIds: ['personal:INBOX'],
+        } satisfies SyncOutcome;
+      }),
+    };
+    const { app, renderer } = await makeApp(fake);
+    try {
+      const stale = makeEmail('personal:INBOX:1');
+      actions.setEmails([stale]);
+      actions.setSelectedEmail(stale.id);
+      actions.setOpenedEmail(stale.id);
+      actions.setSearchActive(true);
+      actions.setSearchQuery('old generation');
+      actions.setSearchHits([stale]);
+
+      await app.requestSync();
+
+      // Folder reload auto-selected the replacement folder...
+      expect(selectors.currentFolderId).toBe('personal:INBOX');
+      // ...so its stale in-memory state must be dropped.
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('folder read failed');
+      expect(selectors.emails).toEqual([]);
+      expect(selectors.selectedEmailId).toBeNull();
+      expect(selectors.openedEmailId).toBeNull();
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('preserves messages, selection, open message and search when bootstrap persistence fails', async () => {
+    const fake = {
+      syncAccountFolder: vi.fn(),
+      syncAccount: vi.fn().mockResolvedValue({
+        kind: 'network',
+        message: 'persist failed',
+      } satisfies SyncOutcome),
+    };
+    const { app, renderer } = await makeApp(fake);
+    try {
+      const stale = makeEmail('personal:INBOX:1');
+      actions.setEmails([stale]);
+      actions.setSelectedEmail(stale.id);
+      actions.setOpenedEmail(stale.id);
+      actions.setSearchActive(true);
+      actions.setSearchQuery('still current');
+      actions.setSearchHits([stale]);
+
+      await app.requestSync();
+
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('persist failed');
+      expect(selectors.emails.map((e) => e.id)).toEqual([stale.id]);
+      expect(selectors.selectedEmailId).toBe(stale.id);
+      expect(selectors.openedEmailId).toBe(stale.id);
+      expect(selectors.searchHits).toEqual([stale]);
+      expect(selectors.searchActive).toBe(true);
     } finally {
       renderer.stop();
       renderer.destroy();

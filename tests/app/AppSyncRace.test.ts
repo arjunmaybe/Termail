@@ -240,6 +240,7 @@ describe('B5 App.requestSync single-flight + stale guard', () => {
           makePersistedFolder({ id: 'work:Sent', name: 'Sent', fullName: 'Sent', type: 'sent' }),
         ],
         messages: [inboxEmail],
+        replacedFolderIds: [],
       });
       await first;
 
@@ -248,6 +249,68 @@ describe('B5 App.requestSync single-flight + stale guard', () => {
       expect(selectors.emails.map((e) => e.id)).toEqual(['work:Sent:7']);
       expect(selectors.emails[0]?.subject).toBe('current sent');
       expect(selectors.isLoadingEmails).toBe(false);
+    } finally {
+      renderer.stop();
+      renderer.destroy();
+    }
+  });
+
+  it('replacement error for the previously synced folder leaves the newly selected folder untouched', async () => {
+    const fake = { syncAccountFolder: vi.fn() };
+    let resolveSync!: (o: SyncOutcome) => void;
+    fake.syncAccountFolder.mockReturnValueOnce(
+      new Promise<SyncOutcome>((resolve) => {
+        resolveSync = resolve;
+      })
+    );
+    const { app, renderer } = await makeApp(fake);
+    try {
+      const inboxEmail = makeEmail({
+        id: 'work:INBOX:9',
+        folderId: 'work:INBOX',
+        subject: 'stale inbox',
+      });
+      const sentEmail = makeEmail({
+        id: 'work:Sent:7',
+        folderId: 'work:Sent',
+        subject: 'current sent',
+      });
+
+      // The user was viewing INBOX when the sync started.
+      actions.setEmails([inboxEmail]);
+      actions.setSelectedEmail(inboxEmail.id);
+      actions.setOpenedEmail(inboxEmail.id);
+
+      const first = app.requestSync();
+      expect(fake.syncAccountFolder).toHaveBeenCalledTimes(1);
+
+      // Navigate to Sent while the INBOX sync is still deferred.
+      actions.setCurrentFolder('work:Sent');
+      actions.setEmails([sentEmail]);
+      actions.setSelectedEmail(sentEmail.id);
+      actions.setOpenedEmail(sentEmail.id);
+      actions.setSearchActive(true);
+      actions.setSearchQuery('sent');
+      actions.setSearchHits([sentEmail]);
+
+      // The INBOX sync committed a replacement, then its read failed.
+      resolveSync({
+        kind: 'network',
+        message: 'folder read failed',
+        replacedFolderIds: ['work:INBOX'],
+      });
+      await first;
+
+      // Sent is the currently relevant folder: nothing of it is cleared.
+      expect(selectors.currentFolderId).toBe('work:Sent');
+      expect(selectors.emails.map((e) => e.id)).toEqual(['work:Sent:7']);
+      expect(selectors.selectedEmailId).toBe('work:Sent:7');
+      expect(selectors.openedEmailId).toBe('work:Sent:7');
+      expect(selectors.syncStatus).toBe('error');
+      expect(selectors.syncError).toBe('folder read failed');
+      // Search is account-wide and may reference deleted INBOX rows.
+      expect(selectors.searchHits).toBeNull();
+      expect(selectors.searchActive).toBe(false);
     } finally {
       renderer.stop();
       renderer.destroy();
@@ -270,6 +333,7 @@ describe('B5 App.requestSync single-flight + stale guard', () => {
         makePersistedFolder({ id: 'work:Sent', name: 'Sent', fullName: 'Sent', type: 'sent' }),
       ],
       messages: [],
+      replacedFolderIds: [],
     });
     const { app, renderer } = await makeApp(fake);
     try {
