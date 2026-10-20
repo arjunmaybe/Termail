@@ -137,6 +137,14 @@ function makeSyncResult(
   };
 }
 
+/** Persisted UIDs from a folder listing, with null UIDs excluded. */
+function persistedUids(rows: ReadonlyArray<{ uid: number | null }>): number[] {
+  return rows
+    .map((row) => row.uid)
+    .filter((uid): uid is number => uid !== null)
+    .sort((a, b) => a - b);
+}
+
 // ---------------------------------------------------------------------------
 // Database lifecycle
 // ---------------------------------------------------------------------------
@@ -1125,6 +1133,235 @@ describe('MessageRepository', () => {
       const after = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
       expect(after.highestUid).toBe(before);
       expect(after.lastSyncStatus).toBe('partial');
+    });
+
+    it('partial result persists messages and advances to the max persisted UID', () => {
+      const r = persistSyncResult(
+        repo,
+        baseAccount,
+        inboxFolder,
+        makeSyncResult([makeMessage({ uid: 1 }), makeMessage({ uid: 2 }), makeMessage({ uid: 3 })]),
+        { status: 'partial', error: 'batch 2 failed' }
+      );
+
+      expect(r.inserted).toBe(3);
+      expect(r.updated).toBe(0);
+      expect(r.highestUid).toBe(3);
+
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.highestUid).toBe(3);
+      expect(state.lastSyncStatus).toBe('partial');
+      expect(state.lastError).toBe('batch 2 failed');
+
+      const uids = persistedUids(repo.listByFolder(baseAccount.id, 'work:INBOX'));
+      expect(uids).toEqual([1, 2, 3]);
+    });
+
+    it('error result persists messages and advances to the max persisted UID', () => {
+      const r = persistSyncResult(
+        repo,
+        baseAccount,
+        inboxFolder,
+        makeSyncResult([makeMessage({ uid: 1 }), makeMessage({ uid: 2 }), makeMessage({ uid: 3 })]),
+        { status: 'error', error: 'fetch failed' }
+      );
+
+      expect(r.inserted).toBe(3);
+      expect(r.updated).toBe(0);
+      expect(r.highestUid).toBe(3);
+
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.highestUid).toBe(3);
+      expect(state.lastSyncStatus).toBe('error');
+      expect(state.lastError).toBe('fetch failed');
+
+      const uids = persistedUids(repo.listByFolder(baseAccount.id, 'work:INBOX'));
+      expect(uids).toEqual([1, 2, 3]);
+    });
+
+    it('partial result preserves a higher existing checkpoint when only lower UIDs are provided', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 50 })], {
+        uidValidity: '1',
+      });
+
+      const r = persistSyncResult(
+        repo,
+        baseAccount,
+        inboxFolder,
+        makeSyncResult([makeMessage({ uid: 1 }), makeMessage({ uid: 2 }), makeMessage({ uid: 3 })]),
+        { status: 'partial', error: 'older batch' }
+      );
+
+      expect(r.inserted).toBe(3);
+
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.highestUid).toBe(50);
+      expect(state.lastSyncStatus).toBe('partial');
+      expect(state.lastError).toBe('older batch');
+      expect(state.uidValidity).toBe('1');
+      expect(state.uidValidityObserved).toBe(true);
+
+      const uids = persistedUids(repo.listByFolder(baseAccount.id, 'work:INBOX'));
+      expect(uids).toEqual([1, 2, 3, 50]);
+    });
+
+    it('error result preserves a higher existing checkpoint when only lower UIDs are provided', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 50 })], {
+        uidValidity: '1',
+      });
+
+      const r = persistSyncResult(
+        repo,
+        baseAccount,
+        inboxFolder,
+        makeSyncResult([makeMessage({ uid: 1 }), makeMessage({ uid: 2 }), makeMessage({ uid: 3 })]),
+        { status: 'error', error: 'older failure' }
+      );
+
+      expect(r.inserted).toBe(3);
+
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.highestUid).toBe(50);
+      expect(state.lastSyncStatus).toBe('error');
+      expect(state.lastError).toBe('older failure');
+      expect(state.uidValidity).toBe('1');
+      expect(state.uidValidityObserved).toBe(true);
+
+      const uids = persistedUids(repo.listByFolder(baseAccount.id, 'work:INBOX'));
+      expect(uids).toEqual([1, 2, 3, 50]);
+    });
+
+    it('non-ok results do not use scannedThroughUid as the checkpoint watermark', () => {
+      const partial = persistSyncResult(
+        repo,
+        baseAccount,
+        inboxFolder,
+        makeSyncResult([makeMessage({ uid: 1 })], { scannedThroughUid: 600 }),
+        { status: 'partial', error: 'batch 2 failed' }
+      );
+      expect(partial.highestUid).toBe(1);
+      expect(repo.getSyncState(baseAccount.id, 'work:INBOX')!.highestUid).toBe(1);
+
+      const failed = persistSyncResult(
+        repo,
+        baseAccount,
+        sentFolder,
+        makeSyncResult([makeMessage({ uid: 1, folder: 'Sent' })], {
+          folder: 'Sent',
+          scannedThroughUid: 700,
+        }),
+        { status: 'error', error: 'fetch failed' }
+      );
+      expect(failed.highestUid).toBe(1);
+      expect(repo.getSyncState(baseAccount.id, 'work:Sent')!.highestUid).toBe(1);
+    });
+
+    it('non-ok results leave a fresh generation unobserved even when uidValidity is provided', () => {
+      // Current behavior: the generation observation is deliberately omitted
+      // for non-ok outcomes. This pins that behavior; it does not define a new
+      // contract for partial/error generation handling.
+      persistSyncResult(
+        repo,
+        baseAccount,
+        inboxFolder,
+        makeSyncResult([makeMessage({ uid: 1 })], { uidValidity: '9' }),
+        { status: 'partial', error: 'batch 2 failed' }
+      );
+
+      const inboxState = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(inboxState.highestUid).toBe(1);
+      expect(inboxState.uidValidity).toBeNull();
+      expect(inboxState.uidValidityObserved).toBe(false);
+
+      persistSyncResult(
+        repo,
+        baseAccount,
+        sentFolder,
+        makeSyncResult([makeMessage({ uid: 1, folder: 'Sent' })], {
+          folder: 'Sent',
+          uidValidity: '9',
+        }),
+        { status: 'error', error: 'fetch failed' }
+      );
+
+      const sentState = repo.getSyncState(baseAccount.id, 'work:Sent')!;
+      expect(sentState.highestUid).toBe(1);
+      expect(sentState.uidValidity).toBeNull();
+      expect(sentState.uidValidityObserved).toBe(false);
+    });
+
+    // These two tests document current behavior only: persistSyncResult
+    // ignores replacement options for non-ok outcomes. This is not a
+    // recommended contract for mixing mailbox generations.
+    it('partial result currently ignores replacement options and retains existing rows', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 50 })], {
+        uidValidity: '1',
+      });
+
+      persistSyncResult(
+        repo,
+        baseAccount,
+        inboxFolder,
+        makeSyncResult([makeMessage({ uid: 51 })], { uidValidity: '2' }),
+        { status: 'partial', error: 'batch 2 failed', replaceFolder: true }
+      );
+
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.highestUid).toBe(51);
+      expect(state.lastSyncStatus).toBe('partial');
+      expect(state.uidValidity).toBe('1');
+      expect(state.uidValidityObserved).toBe(true);
+
+      const uids = persistedUids(repo.listByFolder(baseAccount.id, 'work:INBOX'));
+      expect(uids).toEqual([50, 51]);
+    });
+
+    it('error result currently ignores replacement options and retains existing rows', () => {
+      repo.upsertMessages(baseAccount, sentFolder, [makeMessage({ uid: 50, folder: 'Sent' })], {
+        uidValidity: '1',
+      });
+
+      persistSyncResult(
+        repo,
+        baseAccount,
+        sentFolder,
+        makeSyncResult([makeMessage({ uid: 51, folder: 'Sent' })], {
+          folder: 'Sent',
+          uidValidity: '2',
+        }),
+        { status: 'error', error: 'fetch failed', replaceFolder: true }
+      );
+
+      const state = repo.getSyncState(baseAccount.id, 'work:Sent')!;
+      expect(state.highestUid).toBe(51);
+      expect(state.lastSyncStatus).toBe('error');
+      expect(state.lastError).toBe('fetch failed');
+      expect(state.uidValidity).toBe('1');
+      expect(state.uidValidityObserved).toBe(true);
+
+      const uids = persistedUids(repo.listByFolder(baseAccount.id, 'work:Sent'));
+      expect(uids).toEqual([50, 51]);
+    });
+
+    it('error with an empty result preserves an existing checkpoint', () => {
+      repo.upsertMessages(baseAccount, inboxFolder, [makeMessage({ uid: 50 })], {
+        uidValidity: '1',
+      });
+
+      persistSyncResult(repo, baseAccount, inboxFolder, makeSyncResult([]), {
+        status: 'error',
+        error: 'total failure',
+      });
+
+      const state = repo.getSyncState(baseAccount.id, 'work:INBOX')!;
+      expect(state.highestUid).toBe(50);
+      expect(state.lastSyncStatus).toBe('error');
+      expect(state.lastError).toBe('total failure');
+      expect(state.uidValidity).toBe('1');
+      expect(state.uidValidityObserved).toBe(true);
+
+      const uids = persistedUids(repo.listByFolder(baseAccount.id, 'work:INBOX'));
+      expect(uids).toEqual([50]);
     });
   });
 
