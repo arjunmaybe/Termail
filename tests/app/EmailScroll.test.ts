@@ -124,6 +124,95 @@ describe('Email list auto-scroll via real keypress events', () => {
     await setup.flush();
   }
 
+  /**
+   * Seed two real folders in the database so `App.attach()`'s folder
+   * navigation loads a fresh email array, exactly as it does in the app.
+   * IDs differ per folder so stale offsets from the previous list cannot
+   * accidentally match the new selection.
+   */
+  async function setupFolderSwitchScroll(count: number): Promise<void> {
+    resetDatabase();
+    resetConfigStore();
+    actions.reset();
+    testConfigPath = join(tmpdir(), `termail-fswitch-${Date.now()}-${Math.random()}-config.json`);
+    testDbPath = join(tmpdir(), `termail-fswitch-${Date.now()}-${Math.random()}.sqlite`);
+    const store = getConfigStore(testConfigPath);
+    await store.initialize();
+    await store.updateConfig({
+      accounts: [makeAccountConfig()],
+      database: { path: testDbPath },
+    } as Partial<AppConfig>);
+    const db = getDatabase(store.getConfig());
+    await db.initialize();
+    db.query(
+      `INSERT INTO accounts (id, name, type, email, use_tls, auth_type) VALUES (?, ?, 'imap', ?, 1, 'password')`
+    ).run('work', 'Work', 'me@example.com');
+    db.query(
+      'INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run('work:INBOX', 'work', 'INBOX', 'INBOX', 'inbox', '/');
+    db.query(
+      'INSERT INTO folders (id, account_id, name, full_name, type, delimiter) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run('work:Sent', 'work', 'Sent', 'Sent', 'sent', '/');
+
+    const insertEmail = db.query(
+      `INSERT INTO emails
+         (id, account_id, folder_id, message_id, subject, date, internal_date,
+          is_read, size, body_text)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, ?)`
+    );
+    for (let i = 0; i < count; i += 1) {
+      // Newest first, matching listByFolder's ordering.
+      const stamp = 1000 - i;
+      insertEmail.run(
+        `inbox-${i}`,
+        'work',
+        'work:INBOX',
+        `<inbox-${i}@example.com>`,
+        `Inbox-${i}`,
+        stamp,
+        stamp,
+        `Body-inbox-${i}`
+      );
+      insertEmail.run(
+        `sent-${i}`,
+        'work',
+        'work:Sent',
+        `<sent-${i}@example.com>`,
+        `Sent-${i}`,
+        stamp,
+        stamp,
+        `Body-sent-${i}`
+      );
+    }
+
+    // Short viewport (7 content rows) so 30 two-row emails overflow it.
+    setup = await createTestRenderer({ width: 120, height: 16 });
+    renderer = setup.renderer;
+    mockInput = setup.mockInput;
+
+    app = new App(renderer, { id: 'app-fswitch', initialTheme: 'dark' });
+    renderer.root.add(app);
+    app.attach();
+
+    // Same wiring as main.ts.
+    renderer.keyInput.on('keypress', (key) => {
+      routeKeypress(key, app!, { onShutdown: () => {} });
+    });
+
+    for (let i = 0; i < 100; i += 1) {
+      if (app.isInitialized()) break;
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    expect(app.isInitialized()).toBe(true);
+    // The initial folder is loaded through the real DB path, not a manual
+    // actions.setEmails() shortcut.
+    expect(selectors.currentFolderId).toBe('work:INBOX');
+    expect(selectors.emails[0]?.id).toBe('inbox-0');
+
+    await setup.renderOnce();
+    await setup.flush();
+  }
+
   afterEach(() => {
     actions.reset();
     try {
@@ -182,6 +271,13 @@ describe('Email list auto-scroll via real keypress events', () => {
     await setup!.flush();
   }
 
+  async function pressFolderKey(key: 'l' | 'h'): Promise<void> {
+    mockInput!.pressKey(key);
+    await new Promise((r) => setTimeout(r, 20));
+    await setup!.renderOnce();
+    await setup!.flush();
+  }
+
   async function pressEnter(): Promise<void> {
     mockInput!.pressEnter();
     await new Promise((r) => setTimeout(r, 20));
@@ -218,6 +314,42 @@ describe('Email list auto-scroll via real keypress events', () => {
     }
     expect(selectors.selectedEmailId).toBe('e9');
     expect(frame()).toContain('Subject-9');
+  }, 30000);
+
+  it('scrolling follows the highlight after INBOX -> Sent -> INBOX', async () => {
+    await setupFolderSwitchScroll(30);
+    expect(frame()).toContain('Inbox-0');
+
+    // Establish a measured offset table in INBOX, then switch folders.
+    await pressJ();
+    expect(selectors.selectedEmailId).toBe('inbox-0');
+
+    await pressFolderKey('l');
+    expect(selectors.currentFolderId).toBe('work:Sent');
+    expect(selectors.selectedEmailId).toBeNull();
+    expect(frame()).toContain('Sent-0');
+
+    // j must follow the Sent highlight past the visible rows.
+    for (let i = 0; i < 10; i += 1) {
+      await pressJ();
+    }
+    expect(selectors.selectedEmailId).toBe('sent-9');
+    expect(frame()).toContain('Sent-9');
+    expect(frame()).not.toContain('Sent-0');
+
+    // Returning to INBOX loads a different ID set; Down Arrow must still
+    // keep the selected subject in view.
+    await pressFolderKey('h');
+    expect(selectors.currentFolderId).toBe('work:INBOX');
+    expect(selectors.selectedEmailId).toBeNull();
+    expect(frame()).toContain('Inbox-0');
+
+    for (let i = 0; i < 10; i += 1) {
+      await pressDown();
+    }
+    expect(selectors.selectedEmailId).toBe('inbox-9');
+    expect(frame()).toContain('Inbox-9');
+    expect(frame()).not.toContain('Inbox-0');
   }, 30000);
 
   it('k scrolls back up toward the top', async () => {
