@@ -194,7 +194,17 @@ export class EmailListView extends BoxRenderable {
       return;
     }
 
-    this.updateRowOffsets(emails);
+    // The mounted rows still belong to the previous email array; measuring
+    // them against `emails` would cache the old folder's IDs/offsets. Drop
+    // cross-list offsets before teardown and never measure the old rows.
+    if (this.lastBuiltEmails !== emails) {
+      this.lastRowOffsets = null;
+    } else {
+      // Same array (e.g. theme or viewport rebuild): the mounted rows still
+      // represent this content, so keep offsets current before replacing
+      // them. Width changes invalidate and re-measure inside the helper.
+      this.updateRowOffsets(emails);
+    }
 
     // Rebuild list items. `destroyRecursively` (not `remove` + `destroy`)
     // is required: `destroy` detaches children without destroying them,
@@ -248,6 +258,15 @@ export class EmailListView extends BoxRenderable {
       const live = this.list.getChildren();
       const first = live[0];
       if (first && first.height > 0) {
+        // A state notification can arrive while the previous folder's rows
+        // are still mounted. Only cache offsets for rows that belong to the
+        // current email array (same count, IDs and order); otherwise the
+        // stash would hold IDs the new list can never look up.
+        if (live.length !== emails.length) return;
+        for (let i = 0; i < live.length; i += 1) {
+          const email = emails[i];
+          if (!email || live[i]?.id !== `email-item-${email.id}`) return;
+        }
         const byId = new Map<string, { offset: number; height: number }>();
         for (const child of live) {
           if (!child.id.startsWith('email-item-')) continue;
